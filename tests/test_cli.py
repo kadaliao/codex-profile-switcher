@@ -288,7 +288,46 @@ class CodexSwitchCliTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, 1)
         self.assertIn("current config is not the official OpenAI provider", stderr.getvalue())
+        self.assertIn("codex-safe-switch official", stderr.getvalue())
         self.assertFalse((self.profile_root / ".official").exists())
+
+    def test_official_creates_default_snapshot_when_missing(self) -> None:
+        self.set_current_relay()
+
+        _code, output = self.run_cli_output("official")
+
+        self.assertIn("created default official profile → official", output)
+        self.assertIn("switched → official", output)
+        self.assertEqual((self.profile_root / ".active").read_text().strip(), "official")
+        self.assertFalse((self.profile_root / ".official" / "auth.json").exists())
+
+        provider = (self.profile_root / ".official" / "provider.toml").read_text()
+        self.assertIn('model_provider = "openai"', provider)
+        self.assertIn('preferred_auth_method = "chatgpt"', provider)
+        self.assertNotIn("relay.example", provider)
+
+        config = self.read_config()
+        self.assertIn('model_provider = "openai"', config)
+        self.assertIn('preferred_auth_method = "chatgpt"', config)
+        self.assertNotIn("relay.example", config)
+        self.assertEqual(
+            json.loads((self.codex_home / "auth.json").read_text()),
+            {"auth_mode": "apikey", "OPENAI_API_KEY": "relay"},
+        )
+
+    def test_show_missing_official_profile_explains_how_to_create_it(self) -> None:
+        stderr = io.StringIO()
+        with (
+            patch.dict(os.environ, self.env, clear=False),
+            redirect_stderr(stderr),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            cli.main(["show", "official"])
+
+        self.assertEqual(raised.exception.code, 1)
+        self.assertIn("profile not found: official", stderr.getvalue())
+        self.assertIn("codex-safe-switch official", stderr.getvalue())
+        self.assertIn("codex-safe-switch save official", stderr.getvalue())
 
     def test_alfred_list_offers_initialize_action_when_profiles_and_config_are_missing(self) -> None:
         _code, output = self.run_cli_output("alfred-list")

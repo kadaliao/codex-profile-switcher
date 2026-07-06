@@ -1389,6 +1389,17 @@ def snapshot_official_state(codex: Path) -> None:
     write_session_config(dir_, SessionConfig())
 
 
+def write_default_official_snapshot() -> None:
+    dir_ = official_profile_dir()
+    dir_.mkdir(parents=True, exist_ok=True)
+    doc = tomlkit.document()
+    doc["model_provider"] = "openai"
+    doc["preferred_auth_method"] = "chatgpt"
+    (dir_ / "provider.toml").write_text(tomlkit.dumps(doc))
+    (dir_ / "auth.json").unlink(missing_ok=True)
+    write_session_config(dir_, SessionConfig())
+
+
 def ensure_official_snapshot_available(codex: Path) -> None:
     if official_profile_dir().is_dir():
         prov = official_profile_dir() / "provider.toml"
@@ -1397,7 +1408,8 @@ def ensure_official_snapshot_available(codex: Path) -> None:
     if current_provider_looks_official(codex):
         snapshot_official_state(codex)
         return
-    _die("official OpenAI snapshot not found; switch to official once, then run `codex-safe-switch official`")
+    write_default_official_snapshot()
+    print("created default official profile → official")
 
 
 def switch_to_profile(name: str, *, restart_codex: bool = False) -> int:
@@ -1605,7 +1617,9 @@ def cmd_save(args) -> int:
         if not current_provider_looks_official(codex):
             _die(
                 "current config is not the official OpenAI provider; "
-                "switch/login with official OpenAI first, then run `codex-safe-switch save official`"
+                "run `codex-safe-switch official` to switch with a default official ChatGPT profile, "
+                "or switch/login with official OpenAI first and rerun `codex-safe-switch save official` "
+                "to capture exact settings"
             )
         snapshot_official_state(codex)
         print("saved → official")
@@ -1642,6 +1656,12 @@ def cmd_show(args) -> int:
     name = normalize_profile_name(args.name)
     dir_ = profile_dir_for_name(name)
     if not dir_.is_dir():
+        if name == OFFICIAL_PROFILE_NAME:
+            _die(
+                "profile not found: official; run `codex-safe-switch official` to create a default "
+                "official ChatGPT profile and switch, or run `codex-safe-switch save official` while "
+                "the current config is official to capture exact settings"
+            )
         _die(f"profile not found: {args.name}")
     prov = dir_ / "provider.toml"
     print(f"# {prov}")

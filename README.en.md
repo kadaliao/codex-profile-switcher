@@ -5,178 +5,148 @@
 
 [中文](README.md) | English
 
-One command to switch [Codex CLI](https://github.com/openai/codex) provider configs — official OpenAI provider, third-party relays, multiple API keys. CLI + optional Alfred workflow.
+Switch Codex CLI between the official ChatGPT provider, third-party relays, and multiple API keys.
 
-## New here? Start with this
-
-**What it solves:** Codex CLI talks to one provider at a time. Hand-editing `~/.codex/config.toml` to switch between a relay and your official account easily corrupts local state — especially **session-history metadata** — so switching back leaves your **history list empty**. This tool stores each provider as a profile, swaps only the provider slice, and realigns history on every switch, so your sessions stay visible no matter how often you flip.
-
-**30-second path:**
-
-```bash
-uv tool install codex-safe-switch   # 1. install (needs uv)
-codex-safe-switch                   # 2. just run it = interactive picker; first run imports your current config
-codex-safe-switch save myrelay      # 3. snapshot the current provider as a profile named `myrelay`
-codex-safe-switch official          # 4. one command back to official OpenAI
-```
-
-If your current config is the official OpenAI login on first run, the tool automatically stores the provider slice in the hidden profile `~/.codex/profiles/.official/`, and the active name shows as `official`. You can also refresh it explicitly while the official config is active:
-
-```bash
-codex-safe-switch save official     # saves official provider config only; never saves auth.json
-```
-
-**If you found this *because* your history disappeared after a switch:** don't panic — the history files are usually still there, the metadata just no longer matches the active provider.
+## 30 Seconds
 
 ```bash
 uv tool install codex-safe-switch
-codex-safe-switch doctor-history    # read-only: see which provider/model your history points at
-codex-safe-switch use <profile>     # switch to the provider the history belongs to; this realigns it (use/official both do)
-# Want to repair in place without switching:
-codex-safe-switch merge-history --dry-run   # preview the changes first
-codex-safe-switch merge-history             # write them once it looks right
+codex-safe-switch
 ```
 
-> None of this touches `~/.codex/auth.json`, so your official ChatGPT login is never overwritten. See "What makes it safe" below for the details.
+The first run imports your current `~/.codex/config.toml`.
 
-## Install
+After that, you mostly need three commands:
 
 ```bash
-uv tool install codex-safe-switch
+codex-safe-switch ls            # list profiles
+codex-safe-switch use myrelay   # switch to a relay / custom provider
+codex-safe-switch official      # switch back to official ChatGPT
 ```
 
-Requires [`uv`](https://github.com/astral-sh/uv). Installs `codex-safe-switch` onto `$PATH` (default `~/.local/bin/`).
+## Save A New Profile
 
-## Quick start
+First, manually configure Codex until it works. For example, configure your relay and make sure `codex` runs.
+
+Then save it:
 
 ```bash
-codex-safe-switch           # interactive picker (↑/↓, enter to switch)
-codex-safe-switch ls        # list profiles, ★ marks the active one
-codex-safe-switch save dev  # snapshot current ~/.codex state as `dev`
-codex-safe-switch official  # switch back to the official OpenAI provider
+codex-safe-switch save myrelay
 ```
 
-First run imports your existing `~/.codex/config.toml` so nothing is lost.
+Switch back to it later:
+
+```bash
+codex-safe-switch use myrelay
+```
+
+## First Run Behavior
+
+| Current state | What happens |
+| --- | --- |
+| You are using official ChatGPT | Saved as `official` |
+| You are using a relay / custom provider | Saved under the current provider name |
+| You are logged into ChatGPT, but currently using a relay | The relay is saved first; run `codex-safe-switch official` later to go back |
+| There is no `~/.codex/config.toml` | The tool asks you to configure Codex once first |
+
+`codex-safe-switch official` does not require an existing `official` profile. If it is missing, the tool creates a default official config before switching.
+
+## It Never Touches Login Data
+
+This tool only switches provider config.
+
+It never saves, copies, or overwrites:
+
+- `~/.codex/auth.json`
+- ChatGPT login tokens
+- API key files
+- trusted projects, plugins, MCP config, or TUI preferences
+
+If you switch to official before logging into ChatGPT on this machine, Codex will ask you to log in.
+
+## History Disappeared?
+
+Usually the history files are still there. The metadata just points at a different provider than the one currently active.
+
+Inspect:
+
+```bash
+codex-safe-switch doctor-history
+```
+
+Then switch to the profile you want. The tool aligns history automatically:
+
+```bash
+codex-safe-switch use myrelay
+# or
+codex-safe-switch official
+```
 
 <details>
-<summary><strong>All commands</strong></summary>
+<summary>More Commands</summary>
 
 ```text
-codex-safe-switch              # interactive picker
-codex-safe-switch ls           # list profiles, ★ marks the active one
-codex-safe-switch current      # print the active profile
-codex-safe-switch official     # switch back to the official OpenAI provider (alias: openai)
-codex-safe-switch use [name]   # load <name>; omit for the picker
-codex-safe-switch save <name>  # snapshot the current provider config as <name>
-codex-safe-switch save official
-                               # refresh the hidden official snapshot when the current config is official OpenAI
-codex-safe-switch show <name>  # print <name>'s provider.toml and session state
-codex-safe-switch state <name> # show/set the session-state scope for a profile
-codex-safe-switch rm <name>    # delete profile (the active one is protected)
+codex-safe-switch              interactive profile picker
+codex-safe-switch ls           list profiles
+codex-safe-switch current      show the current profile
+codex-safe-switch use <name>   switch to a profile
+codex-safe-switch official     switch to official ChatGPT
+codex-safe-switch save <name>  save the current provider config
+codex-safe-switch show <name>  show profile contents
+codex-safe-switch rm <name>    delete a profile
 codex-safe-switch restart-codex
-                               # terminate Codex app/server processes so a switch takes effect
+                               restart Codex app/server processes
 codex-safe-switch merge-history --dry-run
-                               # preview history metadata changes without writing files
-codex-safe-switch doctor-history
-                               # inspect current history provider/model state read-only
-codex-safe-switch alfred-list  # JSON for Alfred Script Filter
+                               preview history repair
+codex-safe-switch merge-history
+                               repair history metadata
 ```
 
-`use` / `official` both accept `--restart-codex` to bounce the Codex app/server in one step.
+`use` and `official` accept `--restart-codex`:
 
-The picker auto-falls back to a numeric menu when stdin/stdout aren't TTYs (pipes, scripts).
-
-</details>
-
-<details>
-<summary><strong>Alfred workflow</strong></summary>
-
-After `uv tool install`, double-click `alfred/codex-safe-switch.alfredworkflow`. Trigger with keyword `cx`.
-
-The workflow calls `$HOME/.local/bin/codex-safe-switch`. If `uv tool install` put the binary elsewhere (`uv tool dir --bin` to check), edit the two `script` blocks in the workflow's plist accordingly.
+```bash
+codex-safe-switch use myrelay --restart-codex
+```
 
 </details>
 
 <details>
-<summary><strong>What makes it "safe"</strong></summary>
+<summary>Alfred</summary>
 
-**Only the provider slice is swapped — local state is preserved.** A profile owns these keys/tables in `~/.codex/config.toml`; everything else (trusted projects, plugins, marketplaces, MCP servers, TUI prefs, etc.) is left untouched:
+After installing, double-click `alfred/codex-safe-switch.alfredworkflow`. The keyword is `cx`.
 
-- `model`, `model_provider`, `model_reasoning_effort`, `model_reasoning_summary`, `model_verbosity`
-- `wire_api`, `disable_response_storage`, `preferred_auth_method`
-- `[model_providers.*]`
+If Alfred cannot find the command, check the install location:
 
-**`auth.json` is not managed.** Profiles only store provider-related config; `~/.codex/auth.json` stays owned by Codex itself. `save`, `use`, and `official` never save or write back `auth.json`, so switching providers does not overwrite your official ChatGPT login cache or local auth state.
+```bash
+uv tool dir --bin
+```
 
-**Only the active provider block is saved.** If `model_provider = "..."` is commented out, `save` will not treat a remaining `[model_providers.<name>]` block below it as the current profile. If `model_provider = "relay"` is active, only `[model_providers.relay]` is saved; other provider blocks are left out.
-
-**History is aligned by default.** Every `use` / `official` aligns local Codex history metadata to the active provider and model, so session history stays visible across relays and the official OpenAI login:
-
-- Rollout files and the `state_5.sqlite` threads table get fixed automatically.
-- If `session_index.jsonl` has fallen behind the latest threads in SQLite, the switch appends repaired index entries so mobile history lists don't stay pinned to an older point.
-- On hosts that have used Codex remote-control, the switch also checks the managed app-server path and clears stale unix sockets / stale SSH remote proxy processes.
-- `merge-history --keep-models` does a provider-only repair; `--dry-run` previews; `doctor-history` is read-only diagnostics.
-
-**One-step back to official.** `codex-safe-switch official` is the shortcut back to the official OpenAI provider. The tool keeps a hidden provider snapshot at `~/.codex/profiles/.official/`, refreshed automatically the first time you switch away from official.
-
-You can also run `codex-safe-switch save official` while the current config is official OpenAI to refresh that hidden snapshot explicitly. If the current config is not official OpenAI, the command refuses to run so a relay cannot be saved as `official` by mistake.
-
-**Process isolation.** `restart-codex` (and `--restart-codex`) precisely skips the `codex-safe-switch` process itself so it never kills its own switch.
+Then update the workflow path to the matching `codex-safe-switch`.
 
 </details>
 
 <details>
-<summary><strong>Profile layout + adding a relay</strong></summary>
+<summary>Files And Env Vars</summary>
+
+Profiles live here by default:
 
 ```text
 ~/.codex/profiles/
-├── .active                       # plaintext: name of the active profile
+├── .active
 ├── .official/
-│   └── provider.toml             # official OpenAI provider slice
+│   └── provider.toml
 └── myrelay/
-    └── provider.toml             # only provider-related keys (see examples/)
+    └── provider.toml
 ```
 
-**Add a relay profile**
+Environment variables:
 
-1. Configure the relay normally in `~/.codex/config.toml` and verify `codex` works.
-2. If the key comes from the environment, set `env_key = "..."` in the provider config; profiles do not need or store `auth.json`.
-3. `codex-safe-switch save <name>` — snapshots the provider slice into a new profile.
-4. Use `cx` (Alfred) or `codex-safe-switch use <name>` to switch anytime.
+| Var | Default | Purpose |
+| --- | --- | --- |
+| `CODEX_PROFILE_ROOT` | `~/.codex/profiles` | where profiles are stored |
+| `CODEX_HOME` | `~/.codex` | Codex config directory |
 
-You can also hand-author profile files — see `examples/relay-profile/`.
-
-</details>
-
-<details>
-<summary><strong>Env vars / dev install / releasing</strong></summary>
-
-**Env vars**
-
-| Var                  | Default              | Purpose                          |
-| -------------------- | -------------------- | -------------------------------- |
-| `CODEX_PROFILE_ROOT` | `~/.codex/profiles`  | where profiles live              |
-| `CODEX_HOME`         | `~/.codex`           | the codex config dir to write    |
-
-**No-install one-off**
-
-```bash
-uvx --from codex-safe-switch codex-safe-switch ls
-```
-
-**Install the dev version**
-
-```bash
-uv tool install git+https://github.com/kadaliao/codex-safe-switch.git
-```
-
-**Releasing**
-
-Pushing a `v*` tag triggers `Publish to PyPI`, which verifies the tag matches `pyproject.toml`, runs tests, builds, runs `twine check`, and uploads.
-
-```bash
-git tag vX.Y.Z && git push origin vX.Y.Z
-```
+See [examples/relay-profile/provider.toml](examples/relay-profile/provider.toml) for a relay profile example.
 
 </details>
 

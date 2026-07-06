@@ -5,178 +5,148 @@
 
 中文 | [English](README.en.md)
 
-在官方 OpenAI provider、第三方 relay、多组 API key 之间一键切换 [Codex CLI](https://github.com/openai/codex) 的 provider 配置。CLI + 可选 Alfred workflow。
+在官方 ChatGPT、第三方 relay、多组 API key 之间切换 Codex CLI 配置。
 
-## 第一次用？先看这里
-
-**这个工具解决什么问题:** Codex CLI 同一时间只能连一个 provider。手动改 `~/.codex/config.toml` 切换 relay / 官方账号时,很容易把本地状态(尤其是**历史会话 metadata**)弄乱,导致切回去后**历史会话列表消失**。这个工具把每个 provider 存成一个 profile,切换时只动 provider 字段、并自动对齐历史，所以切来切去历史都还在。
-
-**30 秒上手:**
-
-```bash
-uv tool install codex-safe-switch   # 1. 安装（需要先有 uv）
-codex-safe-switch                   # 2. 直接运行 = 交互选择器，首次会自动导入你现在的配置
-codex-safe-switch save myrelay      # 3. 把当前 provider 存成名为 myrelay 的 profile
-codex-safe-switch official          # 4. 一键切回官方 OpenAI
-```
-
-如果你第一次运行时当前就是官方 OpenAI 登录，工具会自动把 provider 片段保存到隐藏 profile `~/.codex/profiles/.official/`，active 名称显示为 `official`。也可以在官方配置生效时手动刷新一次：
-
-```bash
-codex-safe-switch save official     # 只保存官方 provider 配置，不保存 auth.json
-```
-
-**如果你是因为「切换后历史会话消失」才找到这里：** 别慌，历史文件通常没丢，只是 metadata 和当前 provider 对不上。
+## 30 秒上手
 
 ```bash
 uv tool install codex-safe-switch
-codex-safe-switch doctor-history    # 只读检查，看看现在历史指向哪个 provider/model
-codex-safe-switch use <profile>     # 切到历史对应的那个 provider，会自动对齐历史（use/official 都会）
-# 不想切换、只想原地修复 metadata：
-codex-safe-switch merge-history --dry-run   # 先预览改动
-codex-safe-switch merge-history             # 确认无误后写入
+codex-safe-switch
 ```
 
-> 全程不会动 `~/.codex/auth.json`，所以不会覆盖你的官方 ChatGPT 登录。原理见下面「它怎么保证 safe 切换」一节。
+第一次运行会导入你当前的 `~/.codex/config.toml`。
 
-## 安装
+之后常用的就三个命令：
 
 ```bash
-uv tool install codex-safe-switch
+codex-safe-switch ls            # 看已有 profiles
+codex-safe-switch use myrelay   # 切到 relay / 自定义 provider
+codex-safe-switch official      # 切回官方 ChatGPT
 ```
 
-需要先有 [`uv`](https://github.com/astral-sh/uv)。安装后 `codex-safe-switch` 会被放到 `$PATH`（默认 `~/.local/bin/`）。
+## 保存一个新 profile
 
-## 快速开始
+先把 Codex 手动配置到能用的状态。比如你已经配好了某个 relay，并确认 `codex` 能跑。
+
+然后保存：
 
 ```bash
-codex-safe-switch           # 交互选择（↑/↓，回车切换）
-codex-safe-switch ls        # 列出所有 profile，★ 表示当前
-codex-safe-switch save dev  # 把当前 ~/.codex 状态存成 dev
-codex-safe-switch official  # 切回官方 OpenAI provider
+codex-safe-switch save myrelay
 ```
 
-首次运行会自动把当前 `~/.codex/config.toml` 导入成 profile，不会丢配置。
+以后就可以这样切回去：
+
+```bash
+codex-safe-switch use myrelay
+```
+
+## 第一次用时会怎样
+
+| 你现在的状态 | 会发生什么 |
+| --- | --- |
+| 正在用官方 ChatGPT | 自动保存成 `official` |
+| 正在用 relay / 自定义 provider | 自动保存成当前 provider 名 |
+| 登录过 ChatGPT，但当前正在用 relay | 先保存当前 relay；以后跑 `codex-safe-switch official` 回官方 |
+| 还没有 `~/.codex/config.toml` | 提示你先配置一次 Codex |
+
+`codex-safe-switch official` 不需要提前存在 `official` profile。缺少时会自动创建默认官方配置再切换。
+
+## 它不会碰登录信息
+
+这个工具只切换 provider 配置。
+
+它不会保存、复制或覆盖：
+
+- `~/.codex/auth.json`
+- ChatGPT 登录 token
+- API key 文件
+- trusted projects、插件、MCP、TUI 偏好
+
+如果你切到官方后还没登录过 ChatGPT，Codex 会自己提示你登录。
+
+## 历史会话不见了
+
+通常不是历史丢了，只是历史记录里的 provider 跟当前 provider 对不上。
+
+先看状态：
+
+```bash
+codex-safe-switch doctor-history
+```
+
+然后切到你想用的 profile，工具会自动对齐历史：
+
+```bash
+codex-safe-switch use myrelay
+# 或
+codex-safe-switch official
+```
 
 <details>
-<summary><strong>完整命令</strong></summary>
+<summary>更多命令</summary>
 
 ```text
-codex-safe-switch              # 交互式选择器
-codex-safe-switch ls           # 列出 profiles，★ 表示当前 active
-codex-safe-switch current      # 打印当前 active profile
-codex-safe-switch official     # 切回官方 OpenAI provider（别名：openai）
-codex-safe-switch use [name]   # 加载 <name>；不传 name 时进入选择器
-codex-safe-switch save <name>  # 把当前 provider 配置保存成 <name>
-codex-safe-switch save official
-                               # 当前配置是官方 OpenAI 时，刷新隐藏官方快照
-codex-safe-switch show <name>  # 打印 <name> 的 provider.toml 和 session-state
-codex-safe-switch state <name> # 查看/设置 profile 的 session-state 作用域
-codex-safe-switch rm <name>    # 删除 profile（不允许删除 active）
+codex-safe-switch              交互选择 profile
+codex-safe-switch ls           列出 profiles
+codex-safe-switch current      显示当前 profile
+codex-safe-switch use <name>   切到指定 profile
+codex-safe-switch official     切回官方 ChatGPT
+codex-safe-switch save <name>  保存当前 provider 配置
+codex-safe-switch show <name>  查看 profile 内容
+codex-safe-switch rm <name>    删除 profile
 codex-safe-switch restart-codex
-                               # 终止 Codex app/server 进程，让配置立即生效
+                               重启 Codex app/server 进程
 codex-safe-switch merge-history --dry-run
-                               # 预览历史 metadata 修复，不写入文件
-codex-safe-switch doctor-history
-                               # 只读检查历史 provider/model 状态
-codex-safe-switch alfred-list  # Alfred Script Filter JSON
+                               预览历史修复
+codex-safe-switch merge-history
+                               修复历史 metadata
 ```
 
-`use` / `official` 都可以加 `--restart-codex`，顺手重启 Codex app/server。
+`use` 和 `official` 可以加 `--restart-codex`：
 
-当 stdin/stdout 不是 TTY（管道、脚本）时，选择器会自动降级成数字菜单。
-
-</details>
-
-<details>
-<summary><strong>Alfred 工作流</strong></summary>
-
-执行 `uv tool install` 后，双击 `alfred/codex-safe-switch.alfredworkflow` 导入 Alfred。触发关键词是 `cx`。
-
-workflow 默认调用 `$HOME/.local/bin/codex-safe-switch`。如果你的 `uv tool install` 把命令装到了别处，可以用 `uv tool dir --bin` 查看路径，然后修改 workflow plist 里的两个 script block。
+```bash
+codex-safe-switch use myrelay --restart-codex
+```
 
 </details>
 
 <details>
-<summary><strong>它怎么保证"safe"切换</strong></summary>
+<summary>Alfred</summary>
 
-**只接管 provider，不动本地状态。** 每个 profile 接管 `~/.codex/config.toml` 里的下面这些字段；其他内容（trusted projects、plugins、marketplaces、MCP servers、TUI 偏好等）切换时完整保留：
+安装后双击 `alfred/codex-safe-switch.alfredworkflow` 导入，关键词是 `cx`。
 
-- `model`, `model_provider`, `model_reasoning_effort`, `model_reasoning_summary`, `model_verbosity`
-- `wire_api`, `disable_response_storage`, `preferred_auth_method`
-- `[model_providers.*]`
+如果 Alfred 找不到命令，先看安装位置：
 
-**不接管 `auth.json`。** Profile 只保存 provider 相关配置；`~/.codex/auth.json` 由 Codex 自己维护。`save` / `use` / `official` 都不会保存或写回 `auth.json`，所以切换 provider 不会覆盖你的官方 ChatGPT 登录缓存或本地认证状态。
+```bash
+uv tool dir --bin
+```
 
-**只保存当前启用的 provider 块。** 如果你把 `model_provider = "..."` 注释掉了，即使下面还留着 `[model_providers.<name>]` 块，`save` 也不会把那块当成当前 profile 保存；如果启用了 `model_provider = "relay"`，只保存 `[model_providers.relay]`，不会顺手带走其他 provider 块。
-
-**历史会话默认对齐。** 每次 `use` / `official` 后自动把本地历史 metadata 对齐到当前 provider 和 model，所以 relay 和官方账号之间切换时历史不会消失：
-
-- 自动修复 rollout 文件 + `state_5.sqlite` 里的 provider/model 列。
-- 如果 `session_index.jsonl` 落后于 SQLite 最新 thread，会补追加索引，避免移动端历史停在旧时间点。
-- 已用过 Codex remote-control 的机器会顺手检查 managed app-server 链路，处理旧的 unix socket / SSH proxy 残留。
-- `merge-history --keep-models` 可以只修 provider 不改 model；`--dry-run` 预览；`doctor-history` 只读诊断。
-
-**官方 OpenAI 一键回退。** `codex-safe-switch official` 切回官方 OpenAI provider，工具维护隐藏 provider 快照 `~/.codex/profiles/.official/`，第一次从官方切走时自动刷新。
-
-你也可以在当前配置就是官方 OpenAI 时运行 `codex-safe-switch save official` 主动刷新这个隐藏快照；如果当前配置不是官方 OpenAI，会直接拒绝，避免把 relay 误存成 official。
-
-**进程隔离。** `restart-codex`（以及 `--restart-codex`）精确跳过 `codex-safe-switch` 自身进程，不会自杀。
+然后把 workflow 里的命令路径改成对应的 `codex-safe-switch`。
 
 </details>
 
 <details>
-<summary><strong>Profile 格式 + 添加 relay</strong></summary>
+<summary>文件位置和环境变量</summary>
+
+Profiles 默认放在：
 
 ```text
 ~/.codex/profiles/
-├── .active                       # 明文：当前 active profile 名
+├── .active
 ├── .official/
-│   └── provider.toml             # 官方 OpenAI provider 片段
+│   └── provider.toml
 └── myrelay/
-    └── provider.toml             # 只包含 provider 字段（见 examples/）
+    └── provider.toml
 ```
 
-**添加 relay profile**
+环境变量：
 
-1. 在 `~/.codex/config.toml` 里配置 relay，确认 `codex` 能跑。
-2. 如果 key 来自环境变量，在 provider 里配置 `env_key = "..."`；profile 不需要也不会保存 `auth.json`。
-3. `codex-safe-switch save <name>` 把 provider 片段存成 profile。
-4. 之后用 `cx`（Alfred）或 `codex-safe-switch use <name>` 随时切。
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `CODEX_PROFILE_ROOT` | `~/.codex/profiles` | profile 存放位置 |
+| `CODEX_HOME` | `~/.codex` | Codex 配置目录 |
 
-也可以手写 profile 文件，参考 `examples/relay-profile/`。
-
-</details>
-
-<details>
-<summary><strong>环境变量 / 开发版 / 发版</strong></summary>
-
-**环境变量**
-
-| 变量                 | 默认值              | 用途                    |
-| -------------------- | ------------------ | ----------------------- |
-| `CODEX_PROFILE_ROOT` | `~/.codex/profiles` | profiles 存放位置        |
-| `CODEX_HOME`         | `~/.codex`          | 要写入的 Codex 配置目录   |
-
-**免安装试用**
-
-```bash
-uvx --from codex-safe-switch codex-safe-switch ls
-```
-
-**装开发版**
-
-```bash
-uv tool install git+https://github.com/kadaliao/codex-safe-switch.git
-```
-
-**发版**
-
-push `v*` tag 触发 `Publish to PyPI` workflow,会校验 tag 版本和 `pyproject.toml` 一致,跑测试 + build + twine check 后发布。
-
-```bash
-git tag vX.Y.Z && git push origin vX.Y.Z
-```
+relay profile 示例见 [examples/relay-profile/provider.toml](examples/relay-profile/provider.toml)。
 
 </details>
 
