@@ -45,7 +45,6 @@ SESSION_STATE_FILES = (
 OFFICIAL_PROFILE_NAME = "official"
 OFFICIAL_PROFILE_DIRNAME = ".official"
 OFFICIAL_ALIASES = {OFFICIAL_PROFILE_NAME, "openai"}
-ALFRED_INIT_ARG = "__init__"
 REMOTE_CONTROL_INSTALL_COMMAND = "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
 REMOTE_CONTROL_REPAIR_ENV = "CODEX_SWITCH_REMOTE_REPAIR"
 CLI_SURFACE_CHECK_ENV = "CODEX_SWITCH_CLI_SURFACE_CHECK"
@@ -1582,11 +1581,6 @@ def cmd_current(_args) -> int:
 
 def cmd_use(args) -> int:
     name = normalize_profile_name(args.name)
-    if args.name == ALFRED_INIT_ARG:
-        initialized = bootstrap_current_profile()
-        if initialized is None:
-            _die(no_profiles_message())
-        return 0
     if not name:
         bootstrap_current_profile()
         profiles = list_profiles()
@@ -1720,40 +1714,6 @@ def cmd_state(args) -> int:
     return 0
 
 
-def cmd_alfred_list(_args) -> int:
-    """Emit Alfred Script Filter JSON."""
-    bootstrap_current_profile(verbose=False)
-    active = normalize_profile_name(active_name())
-    items = []
-    for name in list_profiles():
-        if name == active:
-            items.append({
-                "uid": name,
-                "title": f"★ {name}",
-                "arg": name,
-                "subtitle": "current profile — pressing return reloads it",
-                "autocomplete": name,
-            })
-        else:
-            items.append({
-                "uid": name,
-                "title": name,
-                "arg": name,
-                "subtitle": f"switch to {name}",
-                "autocomplete": name,
-            })
-    if not items:
-        items.append({
-            "uid": "initialize",
-            "title": "Initialize Codex profiles",
-            "arg": ALFRED_INIT_ARG,
-            "subtitle": "Run codex-safe-switch save <name> after configuring Codex once",
-            "autocomplete": "initialize",
-        })
-    print(json.dumps({"items": items}, ensure_ascii=False))
-    return 0
-
-
 def cmd_pick(_args) -> int:
     """Default action when no subcommand is given: interactive switch."""
     bootstrap_current_profile()
@@ -1832,9 +1792,6 @@ def build_parser() -> argparse.ArgumentParser:
     s = subs.add_parser("rm", aliases=["remove"], help="delete profile (active is protected)")
     s.add_argument("name")
     s.set_defaults(func=cmd_rm)
-
-    s = subs.add_parser("alfred-list", help="JSON for Alfred Script Filter")
-    s.set_defaults(func=cmd_alfred_list)
 
     return p
 

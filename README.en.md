@@ -9,12 +9,20 @@ Switch Codex CLI between the official ChatGPT provider, third-party relays, and 
 
 ## 30 Seconds
 
+[Install `uv`](https://docs.astral.sh/uv/getting-started/installation/) first, then install this tool:
+
 ```bash
 uv tool install codex-safe-switch
 codex-safe-switch
 ```
 
-The first run imports your current `~/.codex/config.toml`.
+The first run imports the provider config slice from your current `~/.codex/config.toml`.
+
+If the tool is already installed, upgrade it to the latest version with:
+
+```bash
+uv tool upgrade codex-safe-switch
+```
 
 After that, you mostly need three commands:
 
@@ -53,7 +61,9 @@ codex-safe-switch use myrelay
 
 ## It Never Touches Login Data
 
-This tool only switches provider config.
+This tool only saves and switches a provider config slice: `model`, `model_provider`, `model_reasoning_effort`, `model_reasoning_summary`, `model_verbosity`, `wire_api`, `disable_response_storage`, `preferred_auth_method`, and the active provider's `[model_providers.<name>]` block.
+
+When switching profiles, these top-level fields and the entire `[model_providers]` table are replaced by the target profile. Other provider blocks are not backed up or restored. Other config, including projects, plugins, MCP, and TUI settings, stays unchanged.
 
 It never saves, copies, or overwrites:
 
@@ -107,21 +117,6 @@ codex-safe-switch merge-history
 ```bash
 codex-safe-switch use myrelay --restart-codex
 ```
-
-</details>
-
-<details>
-<summary>Alfred</summary>
-
-After installing, double-click `alfred/codex-safe-switch.alfredworkflow`. The keyword is `cx`.
-
-If Alfred cannot find the command, check the install location:
-
-```bash
-uv tool dir --bin
-```
-
-Then update the workflow path to the matching `codex-safe-switch`.
 
 </details>
 
