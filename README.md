@@ -9,12 +9,20 @@
 
 ## 30 秒上手
 
+先[安装 `uv`](https://docs.astral.sh/uv/getting-started/installation/)，再安装本工具：
+
 ```bash
 uv tool install codex-safe-switch
 codex-safe-switch
 ```
 
-第一次运行会导入你当前的 `~/.codex/config.toml`。
+第一次运行会从当前 `~/.codex/config.toml` 导入 provider 配置切片。
+
+已经安装过时，这样升级到最新版：
+
+```bash
+uv tool upgrade codex-safe-switch
+```
 
 之后常用的就三个命令：
 
@@ -53,7 +61,9 @@ codex-safe-switch use myrelay
 
 ## 它不会碰登录信息
 
-这个工具只切换 provider 配置。
+这个工具只保存和切换 provider 配置切片：`model`、`model_provider`、`model_reasoning_effort`、`model_reasoning_summary`、`model_verbosity`、`wire_api`、`disable_response_storage`、`preferred_auth_method`，以及当前 provider 对应的 `[model_providers.<name>]`。
+
+切换 profile 时，这些顶层字段和整个 `[model_providers]` 会被目标 profile 替换；其他 provider block 不会作为备份保留或恢复。项目、插件、MCP 和 TUI 等其他配置保持不变。
 
 它不会保存、复制或覆盖：
 
@@ -107,21 +117,6 @@ codex-safe-switch merge-history
 ```bash
 codex-safe-switch use myrelay --restart-codex
 ```
-
-</details>
-
-<details>
-<summary>Alfred</summary>
-
-安装后双击 `alfred/codex-safe-switch.alfredworkflow` 导入，关键词是 `cx`。
-
-如果 Alfred 找不到命令，先看安装位置：
-
-```bash
-uv tool dir --bin
-```
-
-然后把 workflow 里的命令路径改成对应的 `codex-safe-switch`。
 
 </details>
 

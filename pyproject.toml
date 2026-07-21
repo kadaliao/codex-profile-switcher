@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codex-safe-switch"
-version = "1.0.4"
-description = "Switch between OpenAI Codex CLI provider configurations (official OpenAI provider, third-party relays, multiple API keys). CLI + Alfred workflow."
+version = "1.0.5"
+description = "Switch between OpenAI Codex CLI provider configurations (official OpenAI provider, third-party relays, multiple API keys)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "kadaliao" }]
-keywords = ["codex", "openai", "cli", "alfred", "profile"]
+keywords = ["codex", "openai", "cli", "profile"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",

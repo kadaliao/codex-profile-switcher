@@ -329,14 +329,6 @@ class CodexSwitchCliTests(unittest.TestCase):
         self.assertIn("codex-safe-switch official", stderr.getvalue())
         self.assertIn("codex-safe-switch save official", stderr.getvalue())
 
-    def test_alfred_list_offers_initialize_action_when_profiles_and_config_are_missing(self) -> None:
-        _code, output = self.run_cli_output("alfred-list")
-
-        payload = json.loads(output)
-        self.assertEqual(payload["items"][0]["title"], "Initialize Codex profiles")
-        self.assertEqual(payload["items"][0]["arg"], "__init__")
-        self.assertIn("Run codex-safe-switch save", payload["items"][0]["subtitle"])
-
     def test_restart_codex_kills_only_matching_codex_processes(self) -> None:
         ps_output = "\n".join([
             "101 /Applications/Codex.app/Contents/MacOS/Codex",
