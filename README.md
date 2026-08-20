@@ -106,11 +106,17 @@ codex-safe-switch show <name>  查看 profile 内容
 codex-safe-switch rm <name>    删除 profile
 codex-safe-switch restart-codex
                                重启 Codex app/server 进程
+codex-safe-switch repair-session-index
+                               预览缺失 ID 与标题冲突（默认不写入）
+codex-safe-switch repair-session-index --apply
+                               仅补充索引中缺失的 thread ID
 codex-safe-switch merge-history --dry-run
                                预览历史修复
 codex-safe-switch merge-history
                                修复历史 metadata
 ```
+
+`repair-session-index` 不会覆盖 `session_index.jsonl` 中已有 thread ID 的标题，也不会修改 SQLite title；标题冲突只会显示在报告中。
 
 `use` 和 `official` 可以加 `--restart-codex`：
 

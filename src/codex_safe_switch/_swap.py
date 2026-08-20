@@ -8,19 +8,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import tomlkit
+import tomlkit  # pyright: ignore[reportMissingImports]
 
 # Top-level scalar keys that belong to a provider profile.
-PROVIDER_TOP_KEYS = frozenset({
-    "model",
-    "model_provider",
-    "model_reasoning_effort",
-    "model_reasoning_summary",
-    "model_verbosity",
-    "wire_api",
-    "disable_response_storage",
-    "preferred_auth_method",
-})
+PROVIDER_TOP_KEYS = frozenset(
+    {
+        "model",
+        "model_provider",
+        "model_reasoning_effort",
+        "model_reasoning_summary",
+        "model_verbosity",
+        "wire_api",
+        "disable_response_storage",
+        "preferred_auth_method",
+    }
+)
 
 # Top-level tables that may contain provider profile config.
 PROVIDER_TABLES = frozenset({"model_providers"})
@@ -52,7 +54,9 @@ def extract(src: Path, dst: Path) -> None:
     providers = doc.get("model_providers")
     if provider_name and providers is not None and provider_name in providers:
         out["model_providers"] = tomlkit.parse(
-            tomlkit.dumps({"model_providers": {provider_name: providers[provider_name]}})
+            tomlkit.dumps(
+                {"model_providers": {provider_name: providers[provider_name]}}
+            )
         )["model_providers"]
     dst.write_text(tomlkit.dumps(out))
 

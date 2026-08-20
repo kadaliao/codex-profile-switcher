@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
 import os
-from pathlib import Path
 import sqlite3
 import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 from codex_safe_switch import cli
@@ -23,7 +23,10 @@ def write_rollout(path: Path, provider: str, model: str = "gpt-5.4") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         {"type": "session_meta", "payload": {"model_provider": provider}},
-        {"type": "turn_context", "payload": {"model_provider": provider, "model": model}},
+        {
+            "type": "turn_context",
+            "payload": {"model_provider": provider, "model": model},
+        },
     ]
     path.write_text("".join(json.dumps(line) + "\n" for line in lines))
 
@@ -33,7 +36,10 @@ def write_threads_db(path: Path, provider: str, model: str = "gpt-5.4") -> None:
     conn = sqlite3.connect(path)
     try:
         conn.execute("CREATE TABLE threads (model_provider TEXT, model TEXT)")
-        conn.execute("INSERT INTO threads (model_provider, model) VALUES (?, ?)", (provider, model))
+        conn.execute(
+            "INSERT INTO threads (model_provider, model) VALUES (?, ?)",
+            (provider, model),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -126,24 +132,31 @@ class CodexSwitchCliTests(unittest.TestCase):
         (self.codex_home / "config.toml").write_text(
             'model = "gpt-5.4"\nmodel_provider = "openai"\npreferred_auth_method = "chatgpt"\n'
         )
-        write_json(self.codex_home / "auth.json", {"auth_mode": "chatgpt", "token": "official"})
+        write_json(
+            self.codex_home / "auth.json", {"auth_mode": "chatgpt", "token": "official"}
+        )
 
     def set_current_relay(self) -> None:
         (self.codex_home / "config.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.5"',
-                'model_provider = "relay"',
-                'preferred_auth_method = "apikey"',
-                '',
-                '[model_providers.relay]',
-                'name = "relay"',
-                'base_url = "https://relay.example/openai"',
-                'wire_api = "responses"',
-                'env_key = "RELAY_KEY"',
-                '',
-            ])
+            "\n".join(
+                [
+                    'model = "gpt-5.5"',
+                    'model_provider = "relay"',
+                    'preferred_auth_method = "apikey"',
+                    "",
+                    "[model_providers.relay]",
+                    'name = "relay"',
+                    'base_url = "https://relay.example/openai"',
+                    'wire_api = "responses"',
+                    'env_key = "RELAY_KEY"',
+                    "",
+                ]
+            )
         )
-        write_json(self.codex_home / "auth.json", {"auth_mode": "apikey", "OPENAI_API_KEY": "relay"})
+        write_json(
+            self.codex_home / "auth.json",
+            {"auth_mode": "apikey", "OPENAI_API_KEY": "relay"},
+        )
 
     def test_first_run_ls_imports_existing_relay_config(self) -> None:
         self.set_current_relay()
@@ -160,19 +173,21 @@ class CodexSwitchCliTests(unittest.TestCase):
     def test_save_profile_only_stores_provider_config(self) -> None:
         self.set_current_official()
         (self.codex_home / "config.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.5"',
-                'model_provider = "relay"',
-                'preferred_auth_method = "apikey"',
-                '',
-                '[model_providers.relay]',
-                'name = "relay"',
-                'base_url = "https://relay.example/openai"',
-                'wire_api = "responses"',
-                'requires_openai_auth = false',
-                'env_key = "RELAY_KEY"',
-                '',
-            ])
+            "\n".join(
+                [
+                    'model = "gpt-5.5"',
+                    'model_provider = "relay"',
+                    'preferred_auth_method = "apikey"',
+                    "",
+                    "[model_providers.relay]",
+                    'name = "relay"',
+                    'base_url = "https://relay.example/openai"',
+                    'wire_api = "responses"',
+                    "requires_openai_auth = false",
+                    'env_key = "RELAY_KEY"',
+                    "",
+                ]
+            )
         )
 
         _code, output = self.run_cli_output("save", "relay")
@@ -180,25 +195,29 @@ class CodexSwitchCliTests(unittest.TestCase):
         self.assertIn("saved → relay", output)
         self.assertFalse((self.profile_root / "relay" / "auth.json").exists())
         provider = (self.profile_root / "relay" / "provider.toml").read_text()
-        self.assertIn('requires_openai_auth = false', provider)
+        self.assertIn("requires_openai_auth = false", provider)
         self.assertIn('env_key = "RELAY_KEY"', provider)
 
-    def test_save_profile_omits_model_providers_when_model_provider_is_commented_out(self) -> None:
+    def test_save_profile_omits_model_providers_when_model_provider_is_commented_out(
+        self,
+    ) -> None:
         self.set_current_official()
         (self.codex_home / "config.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.5"',
-                '# model_provider = "relay"',
-                'preferred_auth_method = "apikey"',
-                '',
-                '[model_providers.relay]',
-                'name = "relay"',
-                'base_url = "https://relay.example/openai"',
-                'wire_api = "responses"',
-                'requires_openai_auth = false',
-                'env_key = "RELAY_KEY"',
-                '',
-            ])
+            "\n".join(
+                [
+                    'model = "gpt-5.5"',
+                    '# model_provider = "relay"',
+                    'preferred_auth_method = "apikey"',
+                    "",
+                    "[model_providers.relay]",
+                    'name = "relay"',
+                    'base_url = "https://relay.example/openai"',
+                    'wire_api = "responses"',
+                    "requires_openai_auth = false",
+                    'env_key = "RELAY_KEY"',
+                    "",
+                ]
+            )
         )
 
         self.run_cli("save", "relay")
@@ -212,22 +231,24 @@ class CodexSwitchCliTests(unittest.TestCase):
     def test_save_profile_keeps_only_active_model_provider_block(self) -> None:
         self.set_current_official()
         (self.codex_home / "config.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.5"',
-                'model_provider = "relay"',
-                'preferred_auth_method = "apikey"',
-                '',
-                '[model_providers.relay]',
-                'name = "relay"',
-                'base_url = "https://relay.example/openai"',
-                'wire_api = "responses"',
-                '',
-                '[model_providers.other]',
-                'name = "other"',
-                'base_url = "https://other.example/openai"',
-                'wire_api = "responses"',
-                '',
-            ])
+            "\n".join(
+                [
+                    'model = "gpt-5.5"',
+                    'model_provider = "relay"',
+                    'preferred_auth_method = "apikey"',
+                    "",
+                    "[model_providers.relay]",
+                    'name = "relay"',
+                    'base_url = "https://relay.example/openai"',
+                    'wire_api = "responses"',
+                    "",
+                    "[model_providers.other]",
+                    'name = "other"',
+                    'base_url = "https://other.example/openai"',
+                    'wire_api = "responses"',
+                    "",
+                ]
+            )
         )
 
         self.run_cli("save", "relay")
@@ -244,21 +265,29 @@ class CodexSwitchCliTests(unittest.TestCase):
 
         _code, output = self.run_cli_output("ls")
 
-        self.assertIn("initialized profile from existing Codex config → official", output)
+        self.assertIn(
+            "initialized profile from existing Codex config → official", output
+        )
         self.assertIn("★ official", output)
-        self.assertEqual((self.profile_root / ".active").read_text().strip(), "official")
+        self.assertEqual(
+            (self.profile_root / ".active").read_text().strip(), "official"
+        )
         self.assertFalse((self.profile_root / ".official" / "auth.json").exists())
         provider = (self.profile_root / ".official" / "provider.toml").read_text()
         self.assertIn('model_provider = "openai"', provider)
 
-    def test_first_run_ls_imports_official_provider_config_without_auth_json(self) -> None:
+    def test_first_run_ls_imports_official_provider_config_without_auth_json(
+        self,
+    ) -> None:
         (self.codex_home / "config.toml").write_text(
             'model = "gpt-5.4"\nmodel_provider = "openai"\npreferred_auth_method = "chatgpt"\n'
         )
 
         _code, output = self.run_cli_output("ls")
 
-        self.assertIn("initialized profile from existing Codex config → official", output)
+        self.assertIn(
+            "initialized profile from existing Codex config → official", output
+        )
         self.assertIn("★ official", output)
         self.assertFalse((self.profile_root / ".official" / "auth.json").exists())
         provider = (self.profile_root / ".official" / "provider.toml").read_text()
@@ -287,7 +316,9 @@ class CodexSwitchCliTests(unittest.TestCase):
             cli.main(["save", "official"])
 
         self.assertEqual(raised.exception.code, 1)
-        self.assertIn("current config is not the official OpenAI provider", stderr.getvalue())
+        self.assertIn(
+            "current config is not the official OpenAI provider", stderr.getvalue()
+        )
         self.assertIn("codex-safe-switch official", stderr.getvalue())
         self.assertFalse((self.profile_root / ".official").exists())
 
@@ -298,7 +329,9 @@ class CodexSwitchCliTests(unittest.TestCase):
 
         self.assertIn("created default official profile → official", output)
         self.assertIn("switched → official", output)
-        self.assertEqual((self.profile_root / ".active").read_text().strip(), "official")
+        self.assertEqual(
+            (self.profile_root / ".active").read_text().strip(), "official"
+        )
         self.assertFalse((self.profile_root / ".official" / "auth.json").exists())
 
         provider = (self.profile_root / ".official" / "provider.toml").read_text()
@@ -330,17 +363,21 @@ class CodexSwitchCliTests(unittest.TestCase):
         self.assertIn("codex-safe-switch save official", stderr.getvalue())
 
     def test_restart_codex_kills_only_matching_codex_processes(self) -> None:
-        ps_output = "\n".join([
-            "101 /Applications/Codex.app/Contents/MacOS/Codex",
-            "102 /usr/local/bin/codex app-server",
-            "103 /Users/me/.local/bin/codex-safe-switch restart-codex",
-            "104 /usr/bin/python other.py",
-            "",
-        ])
+        ps_output = "\n".join(
+            [
+                "101 /Applications/Codex.app/Contents/MacOS/Codex",
+                "102 /usr/local/bin/codex app-server",
+                "103 /Users/me/.local/bin/codex-safe-switch restart-codex",
+                "104 /usr/bin/python other.py",
+                "",
+            ]
+        )
 
-        with patch("codex_safe_switch.cli._ps_output", return_value=ps_output), patch(
-            "codex_safe_switch.cli._pid_exists", return_value=False
-        ), patch("codex_safe_switch.cli.os.kill") as kill:
+        with (
+            patch("codex_safe_switch.cli._ps_output", return_value=ps_output),
+            patch("codex_safe_switch.cli._pid_exists", return_value=False),
+            patch("codex_safe_switch.cli.os.kill") as kill,
+        ):
             _code, output = self.run_cli_output("restart-codex")
 
         self.assertIn("restarted Codex processes → 2", output)
@@ -352,31 +389,37 @@ class CodexSwitchCliTests(unittest.TestCase):
         relay_dir.mkdir()
         (relay_dir / "provider.toml").write_text('model_provider = "relay"\n')
 
-        with patch("codex_safe_switch.cli.restart_codex_processes", return_value=3) as restart:
+        with patch(
+            "codex_safe_switch.cli.restart_codex_processes", return_value=3
+        ) as restart:
             _code, output = self.run_cli_output("use", "relay", "--restart-codex")
 
         self.assertIn("switched → relay", output)
         self.assertIn("restarted Codex processes → 3", output)
         restart.assert_called_once()
 
-    def test_use_env_key_profile_without_auth_preserves_existing_chatgpt_login(self) -> None:
+    def test_use_env_key_profile_without_auth_preserves_existing_chatgpt_login(
+        self,
+    ) -> None:
         self.set_current_official()
         relay_dir = self.profile_root / "relay"
         relay_dir.mkdir()
         (relay_dir / "provider.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.5"',
-                'model_provider = "relay"',
-                'preferred_auth_method = "apikey"',
-                '',
-                '[model_providers.relay]',
-                'name = "relay"',
-                'base_url = "https://relay.example/openai"',
-                'wire_api = "responses"',
-                'requires_openai_auth = false',
-                'env_key = "RELAY_KEY"',
-                '',
-            ])
+            "\n".join(
+                [
+                    'model = "gpt-5.5"',
+                    'model_provider = "relay"',
+                    'preferred_auth_method = "apikey"',
+                    "",
+                    "[model_providers.relay]",
+                    'name = "relay"',
+                    'base_url = "https://relay.example/openai"',
+                    'wire_api = "responses"',
+                    "requires_openai_auth = false",
+                    'env_key = "RELAY_KEY"',
+                    "",
+                ]
+            )
         )
 
         _code, output = self.run_cli_output("use", "relay")
@@ -384,7 +427,7 @@ class CodexSwitchCliTests(unittest.TestCase):
         self.assertIn("switched → relay", output)
         config = self.read_config()
         self.assertIn('model_provider = "relay"', config)
-        self.assertIn('requires_openai_auth = false', config)
+        self.assertIn("requires_openai_auth = false", config)
         self.assertIn('env_key = "RELAY_KEY"', config)
         self.assertEqual(
             json.loads((self.codex_home / "auth.json").read_text()),
@@ -400,19 +443,21 @@ class CodexSwitchCliTests(unittest.TestCase):
             {"auth_mode": "chatgpt", "tokens": {"refresh_token": "stale"}},
         )
         (relay_dir / "provider.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.5"',
-                'model_provider = "relay"',
-                'preferred_auth_method = "apikey"',
-                '',
-                '[model_providers.relay]',
-                'name = "relay"',
-                'base_url = "https://relay.example/openai"',
-                'wire_api = "responses"',
-                'requires_openai_auth = false',
-                'env_key = "RELAY_KEY"',
-                '',
-            ])
+            "\n".join(
+                [
+                    'model = "gpt-5.5"',
+                    'model_provider = "relay"',
+                    'preferred_auth_method = "apikey"',
+                    "",
+                    "[model_providers.relay]",
+                    'name = "relay"',
+                    'base_url = "https://relay.example/openai"',
+                    'wire_api = "responses"',
+                    "requires_openai_auth = false",
+                    'env_key = "RELAY_KEY"',
+                    "",
+                ]
+            )
         )
 
         self.run_cli("use", "relay")
@@ -422,30 +467,38 @@ class CodexSwitchCliTests(unittest.TestCase):
             {"auth_mode": "chatgpt", "token": "official"},
         )
 
-    def test_switching_profile_with_auth_file_never_replaces_current_auth_json(self) -> None:
+    def test_switching_profile_with_auth_file_never_replaces_current_auth_json(
+        self,
+    ) -> None:
         self.set_current_official()
         original_auth_text = (self.codex_home / "auth.json").read_text()
         relay_dir = self.profile_root / "relay"
         relay_dir.mkdir()
-        write_json(relay_dir / "auth.json", {"auth_mode": "apikey", "OPENAI_API_KEY": "relay"})
+        write_json(
+            relay_dir / "auth.json", {"auth_mode": "apikey", "OPENAI_API_KEY": "relay"}
+        )
         (relay_dir / "provider.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.5"',
-                'model_provider = "relay"',
-                'preferred_auth_method = "apikey"',
-                '',
-                '[model_providers.relay]',
-                'name = "relay"',
-                'base_url = "https://relay.example/openai"',
-                'wire_api = "responses"',
-                '',
-            ])
+            "\n".join(
+                [
+                    'model = "gpt-5.5"',
+                    'model_provider = "relay"',
+                    'preferred_auth_method = "apikey"',
+                    "",
+                    "[model_providers.relay]",
+                    'name = "relay"',
+                    'base_url = "https://relay.example/openai"',
+                    'wire_api = "responses"',
+                    "",
+                ]
+            )
         )
 
         _code, output = self.run_cli_output("use", "relay")
 
         self.assertIn("switched → relay", output)
-        self.assertEqual((self.codex_home / "auth.json").read_text(), original_auth_text)
+        self.assertEqual(
+            (self.codex_home / "auth.json").read_text(), original_auth_text
+        )
 
     def test_ctrl_c_exits_cleanly_without_traceback(self) -> None:
         with patch("codex_safe_switch.cli.cmd_pick", side_effect=KeyboardInterrupt):
@@ -455,28 +508,36 @@ class CodexSwitchCliTests(unittest.TestCase):
         self.assertEqual(stdout, "")
         self.assertEqual(stderr, "codex-safe-switch: interrupted\n")
 
-    def test_use_openai_alias_restores_official_snapshot_and_merges_history(self) -> None:
+    def test_use_openai_alias_restores_official_snapshot_and_merges_history(
+        self,
+    ) -> None:
         self.set_current_official()
         self.snapshot_official()
 
         relay_dir = self.profile_root / "relay"
         relay_dir.mkdir()
         (relay_dir / "provider.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.4"',
-                'model_provider = "relay"',
-                'preferred_auth_method = "apikey"',
-                '',
-                '[model_providers.relay]',
-                'name = "relay"',
-                'base_url = "https://relay.example/openai"',
-                'wire_api = "responses"',
-                'env_key = "RELAY_KEY"',
-                '',
-            ])
+            "\n".join(
+                [
+                    'model = "gpt-5.4"',
+                    'model_provider = "relay"',
+                    'preferred_auth_method = "apikey"',
+                    "",
+                    "[model_providers.relay]",
+                    'name = "relay"',
+                    'base_url = "https://relay.example/openai"',
+                    'wire_api = "responses"',
+                    'env_key = "RELAY_KEY"',
+                    "",
+                ]
+            )
         )
 
-        write_rollout(self.codex_home / "sessions" / "2026" / "05" / "test.jsonl", "relay", model="gpt-5.5")
+        write_rollout(
+            self.codex_home / "sessions" / "2026" / "05" / "test.jsonl",
+            "relay",
+            model="gpt-5.5",
+        )
         write_threads_db(self.codex_home / "state_5.sqlite", "relay", model="gpt-5.5")
 
         self.run_cli("use", "openai")
@@ -487,14 +548,20 @@ class CodexSwitchCliTests(unittest.TestCase):
             json.loads((self.codex_home / "auth.json").read_text()),
             {"auth_mode": "chatgpt", "token": "official"},
         )
-        self.assertEqual((self.profile_root / ".active").read_text().strip(), "official")
-        rollout = (self.codex_home / "sessions" / "2026" / "05" / "test.jsonl").read_text()
+        self.assertEqual(
+            (self.profile_root / ".active").read_text().strip(), "official"
+        )
+        rollout = (
+            self.codex_home / "sessions" / "2026" / "05" / "test.jsonl"
+        ).read_text()
         self.assertIn('"model_provider":"openai"', rollout)
         self.assertIn('"model":"gpt-5.4"', rollout)
 
         conn = sqlite3.connect(self.codex_home / "state_5.sqlite")
         try:
-            provider, model = conn.execute("SELECT model_provider, model FROM threads").fetchone()
+            provider, model = conn.execute(
+                "SELECT model_provider, model FROM threads"
+            ).fetchone()
         finally:
             conn.close()
         self.assertEqual(provider, "openai")
@@ -506,21 +573,27 @@ class CodexSwitchCliTests(unittest.TestCase):
         relay_dir = self.profile_root / "relay"
         relay_dir.mkdir()
         (relay_dir / "provider.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.5"',
-                'model_provider = "relay"',
-                'preferred_auth_method = "apikey"',
-                '',
-                '[model_providers.relay]',
-                'name = "relay"',
-                'base_url = "https://relay.example/openai"',
-                'wire_api = "responses"',
-                'env_key = "RELAY_KEY"',
-                '',
-            ])
+            "\n".join(
+                [
+                    'model = "gpt-5.5"',
+                    'model_provider = "relay"',
+                    'preferred_auth_method = "apikey"',
+                    "",
+                    "[model_providers.relay]",
+                    'name = "relay"',
+                    'base_url = "https://relay.example/openai"',
+                    'wire_api = "responses"',
+                    'env_key = "RELAY_KEY"',
+                    "",
+                ]
+            )
         )
 
-        write_rollout(self.codex_home / "sessions" / "2026" / "05" / "test.jsonl", "openai", model="gpt-5.4")
+        write_rollout(
+            self.codex_home / "sessions" / "2026" / "05" / "test.jsonl",
+            "openai",
+            model="gpt-5.4",
+        )
         write_threads_db(self.codex_home / "state_5.sqlite", "openai", model="gpt-5.4")
 
         self.run_cli("use", "relay")
@@ -528,13 +601,17 @@ class CodexSwitchCliTests(unittest.TestCase):
         config = self.read_config()
         self.assertIn('model_provider = "relay"', config)
         self.assertEqual((self.profile_root / ".active").read_text().strip(), "relay")
-        rollout = (self.codex_home / "sessions" / "2026" / "05" / "test.jsonl").read_text()
+        rollout = (
+            self.codex_home / "sessions" / "2026" / "05" / "test.jsonl"
+        ).read_text()
         self.assertIn('"model_provider":"relay"', rollout)
         self.assertIn('"model":"gpt-5.5"', rollout)
 
         conn = sqlite3.connect(self.codex_home / "state_5.sqlite")
         try:
-            provider, model = conn.execute("SELECT model_provider, model FROM threads").fetchone()
+            provider, model = conn.execute(
+                "SELECT model_provider, model FROM threads"
+            ).fetchone()
         finally:
             conn.close()
         self.assertEqual(provider, "relay")
@@ -542,18 +619,26 @@ class CodexSwitchCliTests(unittest.TestCase):
 
     def test_merge_history_keep_models_preserves_existing_thread_models(self) -> None:
         self.set_current_official()
-        write_rollout(self.codex_home / "sessions" / "2026" / "05" / "test.jsonl", "relay", model="gpt-5.5")
+        write_rollout(
+            self.codex_home / "sessions" / "2026" / "05" / "test.jsonl",
+            "relay",
+            model="gpt-5.5",
+        )
         write_threads_db(self.codex_home / "state_5.sqlite", "relay", model="gpt-5.5")
 
         self.run_cli("merge-history", "--provider", "openai", "--keep-models")
 
-        rollout = (self.codex_home / "sessions" / "2026" / "05" / "test.jsonl").read_text()
+        rollout = (
+            self.codex_home / "sessions" / "2026" / "05" / "test.jsonl"
+        ).read_text()
         self.assertIn('"model_provider":"openai"', rollout)
         self.assertIn('"model":"gpt-5.5"', rollout)
 
         conn = sqlite3.connect(self.codex_home / "state_5.sqlite")
         try:
-            provider, model = conn.execute("SELECT model_provider, model FROM threads").fetchone()
+            provider, model = conn.execute(
+                "SELECT model_provider, model FROM threads"
+            ).fetchone()
         finally:
             conn.close()
         self.assertEqual(provider, "openai")
@@ -567,7 +652,9 @@ class CodexSwitchCliTests(unittest.TestCase):
         write_threads_db(db_path, "relay", model="gpt-5.5")
         rollout_before = rollout_path.read_text()
 
-        _code, output = self.run_cli_output("merge-history", "--provider", "openai", "--dry-run")
+        _code, output = self.run_cli_output(
+            "merge-history", "--provider", "openai", "--dry-run"
+        )
 
         self.assertIn("would merge history", output)
         self.assertIn("backup →", output)
@@ -580,7 +667,9 @@ class CodexSwitchCliTests(unittest.TestCase):
 
         conn = sqlite3.connect(db_path)
         try:
-            provider, model = conn.execute("SELECT model_provider, model FROM threads").fetchone()
+            provider, model = conn.execute(
+                "SELECT model_provider, model FROM threads"
+            ).fetchone()
         finally:
             conn.close()
         self.assertEqual(provider, "relay")
@@ -621,19 +710,27 @@ class CodexSwitchCliTests(unittest.TestCase):
             "appServerVersion": "0.134.0",
         }
 
-        with patch("codex_safe_switch.cli.shutil.which", return_value="/usr/local/bin/codex"), patch(
-            "codex_safe_switch.cli.subprocess.run",
-            return_value=subprocess.CompletedProcess(
-                ["codex", "app-server", "daemon", "version"],
-                0,
-                stdout=json.dumps(version),
-                stderr="",
+        with (
+            patch(
+                "codex_safe_switch.cli.shutil.which",
+                return_value="/usr/local/bin/codex",
+            ),
+            patch(
+                "codex_safe_switch.cli.subprocess.run",
+                return_value=subprocess.CompletedProcess(
+                    ["codex", "app-server", "daemon", "version"],
+                    0,
+                    stdout=json.dumps(version),
+                    stderr="",
+                ),
             ),
         ):
             _code, output = self.run_cli_output("use", "relay")
 
         self.assertIn("switched → relay", output)
-        self.assertIn("remote-control warning → managed standalone Codex missing", output)
+        self.assertIn(
+            "remote-control warning → managed standalone Codex missing", output
+        )
         self.assertIn("curl -fsSL https://chatgpt.com/codex/install.sh | sh", output)
 
     def test_use_repairs_unmanaged_app_server_and_retries_remote_control(self) -> None:
@@ -660,7 +757,9 @@ class CodexSwitchCliTests(unittest.TestCase):
                 "",
             ]
         )
-        remote_error = "Error: app server is running but is not managed by codex app-server daemon"
+        remote_error = (
+            "Error: app server is running but is not managed by codex app-server daemon"
+        )
         calls = [
             subprocess.CompletedProcess(
                 ["codex", "app-server", "daemon", "version"],
@@ -682,11 +781,16 @@ class CodexSwitchCliTests(unittest.TestCase):
             ),
         ]
 
-        with patch("codex_safe_switch.cli.shutil.which", return_value="/usr/local/bin/codex"), patch(
-            "codex_safe_switch.cli.subprocess.run", side_effect=calls
-        ) as run, patch("codex_safe_switch.cli._ps_output", return_value=ps_output), patch(
-            "codex_safe_switch.cli._pid_exists", return_value=False
-        ), patch("codex_safe_switch.cli.os.kill") as kill:
+        with (
+            patch(
+                "codex_safe_switch.cli.shutil.which",
+                return_value="/usr/local/bin/codex",
+            ),
+            patch("codex_safe_switch.cli.subprocess.run", side_effect=calls) as run,
+            patch("codex_safe_switch.cli._ps_output", return_value=ps_output),
+            patch("codex_safe_switch.cli._pid_exists", return_value=False),
+            patch("codex_safe_switch.cli.os.kill") as kill,
+        ):
             _code, output = self.run_cli_output("use", "relay")
 
         self.assertIn("remote-control repaired → restarted managed app-server", output)
@@ -712,7 +816,10 @@ class CodexSwitchCliTests(unittest.TestCase):
             "electron-local-remote-control-installation-id": "install_old",
             "codex-managed-remote-connections": [
                 {"hostId": "remote-ssh-discovered:mm", "displayName": "frp-mm"},
-                {"hostId": "remote-ssh-codex-managed:tailnet-mm", "displayName": "tailnet-mm"},
+                {
+                    "hostId": "remote-ssh-codex-managed:tailnet-mm",
+                    "displayName": "tailnet-mm",
+                },
                 {"hostId": "local-current", "displayName": "local"},
             ],
             "remote-connection-auto-connect-by-host-id": {
@@ -783,23 +890,30 @@ class CodexSwitchCliTests(unittest.TestCase):
             "timedOut": True,
         }
 
-        with patch("codex_safe_switch.cli.shutil.which", return_value="/usr/local/bin/codex"), patch(
-            "codex_safe_switch.cli.subprocess.run",
-            side_effect=[
-                subprocess.CompletedProcess(
-                    ["codex", "app-server", "daemon", "version"],
-                    0,
-                    stdout=json.dumps(version),
-                    stderr="",
-                ),
-                subprocess.CompletedProcess(
-                    ["codex", "remote-control", "start", "--json"],
-                    0,
-                    stdout=json.dumps(start_payload),
-                    stderr="",
-                ),
-            ],
-        ), patch("codex_safe_switch.cli._ps_output", return_value=""):
+        with (
+            patch(
+                "codex_safe_switch.cli.shutil.which",
+                return_value="/usr/local/bin/codex",
+            ),
+            patch(
+                "codex_safe_switch.cli.subprocess.run",
+                side_effect=[
+                    subprocess.CompletedProcess(
+                        ["codex", "app-server", "daemon", "version"],
+                        0,
+                        stdout=json.dumps(version),
+                        stderr="",
+                    ),
+                    subprocess.CompletedProcess(
+                        ["codex", "remote-control", "start", "--json"],
+                        0,
+                        stdout=json.dumps(start_payload),
+                        stderr="",
+                    ),
+                ],
+            ),
+            patch("codex_safe_switch.cli._ps_output", return_value=""),
+        ):
             _code, output = self.run_cli_output("use", "relay")
 
         self.assertIn("remote-control warning → daemon still connecting", output)
@@ -827,32 +941,41 @@ class CodexSwitchCliTests(unittest.TestCase):
             "appServerVersion": "0.134.0",
         }
 
-        with patch("codex_safe_switch.cli.shutil.which", return_value="/usr/local/bin/codex"), patch(
-            "codex_safe_switch.cli.subprocess.run",
-            side_effect=[
-                subprocess.CompletedProcess(
-                    ["codex", "app-server", "daemon", "version"],
-                    0,
-                    stdout=json.dumps(version),
-                    stderr="",
-                ),
-                subprocess.CompletedProcess(
-                    [str(desktop), "--version"],
-                    0,
-                    stdout="codex-cli 0.133.0\n",
-                    stderr="",
-                ),
-                subprocess.CompletedProcess(
-                    ["codex", "remote-control", "start", "--json"],
-                    0,
-                    stdout='{"status":"connected"}',
-                    stderr="",
-                ),
-            ],
-        ), patch("codex_safe_switch.cli._ps_output", return_value=""):
+        with (
+            patch(
+                "codex_safe_switch.cli.shutil.which",
+                return_value="/usr/local/bin/codex",
+            ),
+            patch(
+                "codex_safe_switch.cli.subprocess.run",
+                side_effect=[
+                    subprocess.CompletedProcess(
+                        ["codex", "app-server", "daemon", "version"],
+                        0,
+                        stdout=json.dumps(version),
+                        stderr="",
+                    ),
+                    subprocess.CompletedProcess(
+                        [str(desktop), "--version"],
+                        0,
+                        stdout="codex-cli 0.133.0\n",
+                        stderr="",
+                    ),
+                    subprocess.CompletedProcess(
+                        ["codex", "remote-control", "start", "--json"],
+                        0,
+                        stdout='{"status":"connected"}',
+                        stderr="",
+                    ),
+                ],
+            ),
+            patch("codex_safe_switch.cli._ps_output", return_value=""),
+        ):
             _code, output = self.run_cli_output("use", "relay")
 
-        self.assertIn("codex cli warning → multiple Codex CLI versions are active", output)
+        self.assertIn(
+            "codex cli warning → multiple Codex CLI versions are active", output
+        )
         self.assertIn("shell codex: 0.134.0 (/usr/local/bin/codex)", output)
         self.assertIn(f"managed standalone: 0.134.0 ({managed})", output)
         self.assertIn(f"Desktop bundled: 0.133.0 ({desktop})", output)
@@ -882,29 +1005,41 @@ class CodexSwitchCliTests(unittest.TestCase):
             ]
         )
 
-        with patch("codex_safe_switch.cli.shutil.which", return_value="/usr/local/bin/codex"), patch(
-            "codex_safe_switch.cli.subprocess.run",
-            side_effect=[
-                subprocess.CompletedProcess(
-                    ["codex", "app-server", "daemon", "version"],
-                    0,
-                    stdout=json.dumps(version),
-                    stderr="",
-                ),
-                subprocess.CompletedProcess(
-                    ["codex", "remote-control", "start", "--json"],
-                    0,
-                    stdout='{"status":"connected"}',
-                    stderr="",
-                ),
-            ],
-        ), patch("codex_safe_switch.cli._ps_output", return_value=ps_output), patch(
-            "codex_safe_switch.cli._pid_exists", return_value=False
-        ), patch("codex_safe_switch.cli.os.kill") as kill:
+        with (
+            patch(
+                "codex_safe_switch.cli.shutil.which",
+                return_value="/usr/local/bin/codex",
+            ),
+            patch(
+                "codex_safe_switch.cli.subprocess.run",
+                side_effect=[
+                    subprocess.CompletedProcess(
+                        ["codex", "app-server", "daemon", "version"],
+                        0,
+                        stdout=json.dumps(version),
+                        stderr="",
+                    ),
+                    subprocess.CompletedProcess(
+                        ["codex", "remote-control", "start", "--json"],
+                        0,
+                        stdout='{"status":"connected"}',
+                        stderr="",
+                    ),
+                ],
+            ),
+            patch("codex_safe_switch.cli._ps_output", return_value=ps_output),
+            patch("codex_safe_switch.cli._pid_exists", return_value=False),
+            patch("codex_safe_switch.cli.os.kill") as kill,
+        ):
             _code, output = self.run_cli_output("use", "relay")
 
-        self.assertIn("remote-control repaired → stopped stale remote proxy processes (stopped 3)", output)
-        self.assertEqual([call.args[0] for call in kill.call_args_list], [301, 302, 303])
+        self.assertIn(
+            "remote-control repaired → stopped stale remote proxy processes (stopped 3)",
+            output,
+        )
+        self.assertEqual(
+            [call.args[0] for call in kill.call_args_list], [301, 302, 303]
+        )
 
     def test_use_warns_when_desktop_respawns_remote_proxy_processes(self) -> None:
         self.env[cli.REMOTE_CONTROL_REPAIR_ENV] = "1"
@@ -920,40 +1055,58 @@ class CodexSwitchCliTests(unittest.TestCase):
             "managedCodexPath": str(managed),
             "managedCodexVersion": "0.134.0",
         }
-        ps_before = "\n".join([
-            "301 ssh -T mm sh -c 'codex app-server proxy'",
-            "302 codex app-server proxy",
-            "",
-        ])
-        ps_after = "\n".join([
-            "401 ssh -T mm sh -c 'codex app-server proxy'",
-            "402 codex app-server proxy",
-            "",
-        ])
+        ps_before = "\n".join(
+            [
+                "301 ssh -T mm sh -c 'codex app-server proxy'",
+                "302 codex app-server proxy",
+                "",
+            ]
+        )
+        ps_after = "\n".join(
+            [
+                "401 ssh -T mm sh -c 'codex app-server proxy'",
+                "402 codex app-server proxy",
+                "",
+            ]
+        )
 
-        with patch("codex_safe_switch.cli.shutil.which", return_value="/usr/local/bin/codex"), patch(
-            "codex_safe_switch.cli.subprocess.run",
-            side_effect=[
-                subprocess.CompletedProcess(
-                    ["codex", "app-server", "daemon", "version"],
-                    0,
-                    stdout=json.dumps(version),
-                    stderr="",
-                ),
-                subprocess.CompletedProcess(
-                    ["codex", "remote-control", "start", "--json"],
-                    0,
-                    stdout='{"status":"connected"}',
-                    stderr="",
-                ),
-            ],
-        ), patch("codex_safe_switch.cli._ps_output", side_effect=[ps_before, ps_after]), patch(
-            "codex_safe_switch.cli._pid_exists", return_value=False
-        ), patch("codex_safe_switch.cli.os.kill"):
+        with (
+            patch(
+                "codex_safe_switch.cli.shutil.which",
+                return_value="/usr/local/bin/codex",
+            ),
+            patch(
+                "codex_safe_switch.cli.subprocess.run",
+                side_effect=[
+                    subprocess.CompletedProcess(
+                        ["codex", "app-server", "daemon", "version"],
+                        0,
+                        stdout=json.dumps(version),
+                        stderr="",
+                    ),
+                    subprocess.CompletedProcess(
+                        ["codex", "remote-control", "start", "--json"],
+                        0,
+                        stdout='{"status":"connected"}',
+                        stderr="",
+                    ),
+                ],
+            ),
+            patch(
+                "codex_safe_switch.cli._ps_output", side_effect=[ps_before, ps_after]
+            ),
+            patch("codex_safe_switch.cli._pid_exists", return_value=False),
+            patch("codex_safe_switch.cli.os.kill"),
+        ):
             _code, output = self.run_cli_output("use", "relay")
 
-        self.assertIn("remote-control repaired → stopped stale remote proxy processes (stopped 2)", output)
-        self.assertIn("remote-control warning → Desktop respawned remote proxy processes", output)
+        self.assertIn(
+            "remote-control repaired → stopped stale remote proxy processes (stopped 2)",
+            output,
+        )
+        self.assertIn(
+            "remote-control warning → Desktop respawned remote proxy processes", output
+        )
         self.assertIn("restart Codex Desktop", output)
 
     def test_restart_codex_stops_remote_proxy_process_chain(self) -> None:
@@ -967,114 +1120,143 @@ class CodexSwitchCliTests(unittest.TestCase):
             ]
         )
 
-        with patch("codex_safe_switch.cli._ps_output", return_value=ps_output), patch(
-            "codex_safe_switch.cli._pid_exists", return_value=False
-        ), patch("codex_safe_switch.cli.os.kill") as kill:
+        with (
+            patch("codex_safe_switch.cli._ps_output", return_value=ps_output),
+            patch("codex_safe_switch.cli._pid_exists", return_value=False),
+            patch("codex_safe_switch.cli.os.kill") as kill,
+        ):
             _code, output = self.run_cli_output("restart-codex")
 
         self.assertIn("restarted Codex processes → 3", output)
-        self.assertEqual([call.args[0] for call in kill.call_args_list], [301, 302, 303])
+        self.assertEqual(
+            [call.args[0] for call in kill.call_args_list], [301, 302, 303]
+        )
 
-    def test_use_repairs_stale_session_index_from_sqlite_threads(self) -> None:
+    def test_use_preserves_session_index_and_sqlite_titles(self) -> None:
         self.set_current_official()
         relay_dir = self.profile_root / "relay"
         relay_dir.mkdir()
         (relay_dir / "provider.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.5"',
-                'model_provider = "relay"',
-                '',
-            ])
+            "\n".join(
+                [
+                    'model = "gpt-5.5"',
+                    'model_provider = "relay"',
+                    "",
+                ]
+            )
         )
         index = self.codex_home / "session_index.jsonl"
         index.write_text(
             json.dumps(
                 {
                     "id": "thread-1",
-                    "thread_name": "Old title",
+                    "thread_name": "查找健身动作图集",
                     "updated_at": "2026-05-28T08:00:00Z",
-                }
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+        sqlite_title = (
+            "我健身一段时间了。但是我不知道我都学会了哪些动作，请帮我整理完整动作列表"
+        )
+        write_thread_index_db(
+            self.codex_home / "state_5.sqlite",
+            thread_id="thread-1",
+            title=sqlite_title,
+            updated_at=1779964509,
+            updated_at_ms=1779964509824,
+            provider="relay",
+            model="gpt-5.5",
+        )
+        index_before = index.read_bytes()
+        sqlite_title_before = sqlite_title.encode()
+
+        _code, output = self.run_cli_output("use", "relay")
+
+        self.assertNotIn("session index repaired", output)
+        self.assertNotIn("thread titles repaired", output)
+        self.assertEqual(index.read_bytes(), index_before)
+        conn = sqlite3.connect(self.codex_home / "state_5.sqlite")
+        try:
+            (title,) = conn.execute(
+                "SELECT title FROM threads WHERE id = 'thread-1'"
+            ).fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(title.encode(), sqlite_title_before)
+
+    def test_repair_session_index_defaults_to_dry_run_and_reports_title_conflicts(
+        self,
+    ) -> None:
+        index = self.codex_home / "session_index.jsonl"
+        index.write_text(
+            json.dumps(
+                {
+                    "id": "thread-1",
+                    "thread_name": "查找健身动作图集",
+                    "updated_at": "2026-05-28T08:00:00Z",
+                },
+                ensure_ascii=False,
             )
             + "\n"
         )
         write_thread_index_db(
             self.codex_home / "state_5.sqlite",
             thread_id="thread-1",
-            title="New title",
+            title="完整首条提问",
+            updated_at=1779964509,
+            updated_at_ms=1779964509824,
+            provider="relay",
+            model="gpt-5.5",
+        )
+        index_before = index.read_bytes()
+
+        _code, output = self.run_cli_output("repair-session-index")
+
+        self.assertIn("session index missing thread IDs → 0", output)
+        self.assertIn("session index title conflicts → 1", output)
+        self.assertIn("session index entries would append → 0", output)
+        self.assertIn("id=thread-1", output)
+        self.assertEqual(index.read_bytes(), index_before)
+
+    def test_repair_session_index_apply_adds_only_missing_thread_ids(self) -> None:
+        index = self.codex_home / "session_index.jsonl"
+        index.write_text("")
+        write_thread_index_db(
+            self.codex_home / "state_5.sqlite",
+            thread_id="thread-2",
+            title="Missing thread",
             updated_at=1779964509,
             updated_at_ms=1779964509824,
             provider="relay",
             model="gpt-5.5",
         )
 
-        _code, output = self.run_cli_output("use", "relay")
+        _code, output = self.run_cli_output("repair-session-index", "--apply")
 
-        self.assertIn("session index repaired → 1 entries", output)
+        self.assertIn("session index missing thread IDs → 1", output)
+        self.assertIn("session index title conflicts → 0", output)
+        self.assertIn("session index entries appended → 1", output)
         lines = [json.loads(line) for line in index.read_text().splitlines()]
-        self.assertEqual(lines[-1]["id"], "thread-1")
-        self.assertEqual(lines[-1]["thread_name"], "New title")
-        self.assertEqual(lines[-1]["updated_at"], "2026-05-28T10:35:09.824000Z")
-
-    def test_use_restores_prompt_like_sqlite_title_from_session_index(self) -> None:
-        self.set_current_official()
-        relay_dir = self.profile_root / "relay"
-        relay_dir.mkdir()
-        (relay_dir / "provider.toml").write_text(
-            '\n'.join([
-                'model = "gpt-5.5"',
-                'model_provider = "relay"',
-                '',
-            ])
+        self.assertEqual(
+            lines,
+            [
+                {
+                    "id": "thread-2",
+                    "thread_name": "Missing thread",
+                    "updated_at": "2026-05-28T10:35:09.824000Z",
+                }
+            ],
         )
-        prompt_title = "<aside>\n💡\n\n**目标**：做一个 IT 学习版 Duolingo\n</aside>"
-        index = self.codex_home / "session_index.jsonl"
-        index.write_text(
-            "\n".join(
-                [
-                    json.dumps(
-                        {
-                            "id": "thread-1",
-                            "thread_name": "技术多邻国",
-                            "updated_at": "2026-06-03T12:32:14.456811Z",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    json.dumps(
-                        {
-                            "id": "thread-1",
-                            "thread_name": prompt_title,
-                            "updated_at": "2026-06-04T00:50:42.834000Z",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    "",
-                ]
-            )
-        )
-        write_thread_index_db(
-            self.codex_home / "state_5.sqlite",
-            thread_id="thread-1",
-            title=prompt_title,
-            updated_at=1780534242,
-            updated_at_ms=1780534242834,
-            provider="relay",
-            model="gpt-5.5",
-        )
-
-        _code, output = self.run_cli_output("use", "relay")
-
-        self.assertIn("thread titles repaired → 1", output)
-        self.assertIn("session index repaired → 1 entries", output)
         conn = sqlite3.connect(self.codex_home / "state_5.sqlite")
         try:
-            (title,) = conn.execute("SELECT title FROM threads WHERE id = 'thread-1'").fetchone()
+            (title,) = conn.execute(
+                "SELECT title FROM threads WHERE id = 'thread-2'"
+            ).fetchone()
         finally:
             conn.close()
-        self.assertEqual(title, "技术多邻国")
-        lines = [json.loads(line) for line in index.read_text().splitlines()]
-        self.assertEqual(lines[-1]["id"], "thread-1")
-        self.assertEqual(lines[-1]["thread_name"], "技术多邻国")
-        self.assertEqual(lines[-1]["updated_at"], "2026-06-04T00:50:42.834000Z")
+        self.assertEqual(title, "Missing thread")
 
 
 if __name__ == "__main__":

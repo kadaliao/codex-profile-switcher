@@ -106,11 +106,17 @@ codex-safe-switch show <name>  show profile contents
 codex-safe-switch rm <name>    delete a profile
 codex-safe-switch restart-codex
                                restart Codex app/server processes
+codex-safe-switch repair-session-index
+                               preview missing IDs and title conflicts (no writes by default)
+codex-safe-switch repair-session-index --apply
+                               add only thread IDs missing from the index
 codex-safe-switch merge-history --dry-run
                                preview history repair
 codex-safe-switch merge-history
                                repair history metadata
 ```
+
+`repair-session-index` never overwrites titles for thread IDs already present in `session_index.jsonl` and never changes SQLite titles. Title conflicts are report-only.
 
 `use` and `official` accept `--restart-codex`:
 

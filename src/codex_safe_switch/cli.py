@@ -13,26 +13,25 @@ Storage layout:
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
 import os
-import signal
 import shutil
-import stat
+import signal
 import sqlite3
+import stat
 import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import NoReturn, Optional
 
-import tomlkit
+import tomlkit  # pyright: ignore[reportMissingImports]
 
 from . import _swap
 from .picker import pick
-
 
 SESSION_STATE_FILES = (
     "history.jsonl",
@@ -91,15 +90,16 @@ class CodexCliSurface:
 
 
 @dataclass(frozen=True)
-class SessionIndexThreadState:
-    latest_ms: int = 0
-    latest_name: Optional[str] = None
-    best_name: Optional[str] = None
-    best_name_ms: int = 0
+class SessionIndexRepairResult:
+    missing_thread_ids: tuple[str, ...]
+    title_conflicts: tuple[tuple[str, str | None, str], ...]
+    additions: tuple[dict[str, str], ...]
 
 
 def profile_root() -> Path:
-    return Path(os.environ.get("CODEX_PROFILE_ROOT") or Path.home() / ".codex" / "profiles")
+    return Path(
+        os.environ.get("CODEX_PROFILE_ROOT") or Path.home() / ".codex" / "profiles"
+    )
 
 
 def codex_dir() -> Path:
@@ -137,6 +137,8 @@ def normalize_profile_name(name: Optional[str]) -> Optional[str]:
 
 def profile_dir_for_name(name: str) -> Path:
     normalized = normalize_profile_name(name)
+    if normalized is None:
+        raise ValueError("profile name must not be empty")
     if normalized == OFFICIAL_PROFILE_NAME:
         return official_profile_dir()
     return profile_root() / normalized
@@ -212,7 +214,7 @@ def no_profiles_message() -> str:
     )
 
 
-def _die(msg: str) -> "NoReturn":  # type: ignore[name-defined]
+def _die(msg: str) -> NoReturn:
     print(f"codex-safe-switch: {msg}", file=sys.stderr)
     raise SystemExit(1)
 
@@ -388,7 +390,10 @@ def _custom_codex_home_is_active(codex: Path) -> bool:
     if not configured:
         return False
     try:
-        return Path(configured).expanduser().resolve() != (Path.home() / ".codex").resolve()
+        return (
+            Path(configured).expanduser().resolve()
+            != (Path.home() / ".codex").resolve()
+        )
     except OSError:
         return Path(configured).expanduser() != Path.home() / ".codex"
 
@@ -404,14 +409,18 @@ def remote_control_repair_allowed(codex: Path) -> bool:
     override = _env_bool(REMOTE_CONTROL_REPAIR_ENV)
     if override is not None:
         return override
-    return not _custom_codex_home_is_active(codex) and has_remote_control_enrollment(codex)
+    return not _custom_codex_home_is_active(codex) and has_remote_control_enrollment(
+        codex
+    )
 
 
 def cli_surface_check_allowed(codex: Path) -> bool:
     override = _env_bool(CLI_SURFACE_CHECK_ENV)
     if override is not None:
         return override
-    return not _custom_codex_home_is_active(codex) and remote_control_repair_allowed(codex)
+    return not _custom_codex_home_is_active(codex) and remote_control_repair_allowed(
+        codex
+    )
 
 
 def has_remote_control_enrollment(codex: Path) -> bool:
@@ -521,15 +530,21 @@ def maybe_warn_cli_surface_mismatch(codex: Path, daemon_version: dict) -> None:
         surfaces.append(CodexCliSurface("shell codex", shell_version, Path(shell_path)))
 
     managed_path = _managed_standalone_path(codex, daemon_version)
-    managed_version = _normalize_codex_version(daemon_version.get("managedCodexVersion"))
+    managed_version = _normalize_codex_version(
+        daemon_version.get("managedCodexVersion")
+    )
     if managed_path.is_file() and managed_version:
-        surfaces.append(CodexCliSurface("managed standalone", managed_version, managed_path))
+        surfaces.append(
+            CodexCliSurface("managed standalone", managed_version, managed_path)
+        )
 
     desktop_path = _desktop_bundled_codex_path()
     if desktop_path.is_file():
         desktop_version = _run_codex_version(desktop_path)
         if desktop_version:
-            surfaces.append(CodexCliSurface("Desktop bundled", desktop_version, desktop_path))
+            surfaces.append(
+                CodexCliSurface("Desktop bundled", desktop_version, desktop_path)
+            )
 
     versions = {surface.version for surface in surfaces}
     if len(versions) <= 1:
@@ -539,7 +554,9 @@ def maybe_warn_cli_surface_mismatch(codex: Path, daemon_version: dict) -> None:
     for surface in surfaces:
         path = f" ({surface.path})" if surface.path is not None else ""
         print(f"  {surface.label}: {surface.version}{path}")
-    print("codex cli note → Desktop app owns its bundled CLI; update/restart Codex.app instead of overwriting the app bundle")
+    print(
+        "codex cli note → Desktop app owns its bundled CLI; update/restart Codex.app instead of overwriting the app bundle"
+    )
 
 
 def _remote_control_needs_standalone_install(text: str) -> bool:
@@ -551,11 +568,14 @@ def _remote_control_is_unmanaged(text: str) -> bool:
     lower = text.lower()
     return (
         "not managed by codex app-server daemon" in lower
-        or "unmanaged" in lower and "app-server" in lower
+        or "unmanaged" in lower
+        and "app-server" in lower
     )
 
 
-def _remote_control_pending_description(result: subprocess.CompletedProcess[str]) -> Optional[str]:
+def _remote_control_pending_description(
+    result: subprocess.CompletedProcess[str],
+) -> Optional[str]:
     if result.returncode != 0:
         return None
     try:
@@ -565,7 +585,8 @@ def _remote_control_pending_description(result: subprocess.CompletedProcess[str]
     if not isinstance(data, dict):
         return None
     status = str(data.get("status") or "").strip()
-    timed_out = data.get("timedOut") is True
+    timed_out_value = data.get("timedOut")
+    timed_out = isinstance(timed_out_value, bool) and timed_out_value
     if status != "connecting" and not timed_out:
         return None
     bits = []
@@ -590,7 +611,9 @@ def _atomic_write_json(path: Path, data: dict) -> None:
     os.close(fd)
     tmp = Path(tmp_str)
     try:
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        tmp.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        )
         _copy_mode(path if path.exists() else None, tmp)
         os.replace(tmp, path)
     finally:
@@ -697,31 +720,45 @@ def maybe_repair_remote_control(codex: Path) -> set[int]:
     stopped = stop_unmanaged_app_server_processes()
     retry = _run_codex_command(["remote-control", "start", "--json"])
     if retry is not None and retry.returncode == 0:
-        print(f"remote-control repaired → restarted managed app-server (stopped {len(stopped)})")
+        print(
+            f"remote-control repaired → restarted managed app-server (stopped {len(stopped)})"
+        )
         return stopped
 
     retry_output = _combined_output(retry) if retry is not None else first_output
     if _remote_control_needs_standalone_install(retry_output):
         _print_missing_standalone_warning(managed_path)
     else:
-        print("remote-control warning → could not repair managed app-server automatically")
+        print(
+            "remote-control warning → could not repair managed app-server automatically"
+        )
     return stopped
 
 
-def maybe_stop_remote_proxy_processes(codex: Path, *, exclude: Optional[set[int]] = None) -> None:
+def maybe_stop_remote_proxy_processes(
+    codex: Path, *, exclude: Optional[set[int]] = None
+) -> None:
     if not remote_control_repair_allowed(codex):
         return
     stopped = stop_remote_proxy_processes(exclude=exclude)
     if not stopped:
         return
-    print(f"remote-control repaired → stopped stale remote proxy processes (stopped {len(stopped)})")
-    print("remote-control hint → restart Codex Desktop if old remote proxy processes reappear")
+    print(
+        f"remote-control repaired → stopped stale remote proxy processes (stopped {len(stopped)})"
+    )
+    print(
+        "remote-control hint → restart Codex Desktop if old remote proxy processes reappear"
+    )
     time.sleep(REMOTE_PROXY_RESPAWN_GRACE_SECONDS)
     remaining = [pid for pid in find_remote_proxy_processes() if pid not in stopped]
     if remaining:
         joined = ", ".join(str(pid) for pid in remaining)
-        print(f"remote-control warning → Desktop respawned remote proxy processes (pids: {joined})")
-        print("remote-control hint → restart Codex Desktop to drop stale in-memory remote state")
+        print(
+            f"remote-control warning → Desktop respawned remote proxy processes (pids: {joined})"
+        )
+        print(
+            "remote-control hint → restart Codex Desktop to drop stale in-memory remote state"
+        )
 
 
 def _atomic_write_copy(src: Path, dst: Path) -> None:
@@ -820,7 +857,9 @@ def restore_session_state(config: SessionConfig, codex: Path) -> None:
         _copy_optional(src, dst)
 
 
-def maybe_switch_session_state(current_name: Optional[str], next_name: str, codex: Path) -> None:
+def maybe_switch_session_state(
+    current_name: Optional[str], next_name: str, codex: Path
+) -> None:
     current_cfg = SessionConfig()
     next_cfg = load_session_config(profile_dir_for_name(next_name))
     current_name = normalize_profile_name(current_name)
@@ -892,17 +931,26 @@ def normalize_rollout_file(
                         payload["model_provider"] = target.provider
                         item_changed = True
                 elif item.get("type") == "turn_context":
-                    if target.provider and payload.get("model_provider") != target.provider:
+                    if (
+                        target.provider
+                        and payload.get("model_provider") != target.provider
+                    ):
                         payload["model_provider"] = target.provider
                         item_changed = True
-                    if not keep_models and target.model and payload.get("model") != target.model:
+                    if (
+                        not keep_models
+                        and target.model
+                        and payload.get("model") != target.model
+                    ):
                         payload["model"] = target.model
                         item_changed = True
 
             if item_changed:
                 changed = True
                 changed_lines += 1
-                lines_out.append(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n")
+                lines_out.append(
+                    json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n"
+                )
             else:
                 lines_out.append(raw)
 
@@ -934,7 +982,10 @@ def normalize_state_db(path: Path, target: IdentityConfig, keep_models: bool) ->
                 "SELECT COUNT(*) FROM threads WHERE model_provider != ?",
                 (target.provider,),
             ).fetchone()[0]
-            cur.execute("UPDATE threads SET model_provider = ? WHERE model_provider != ?", (target.provider, target.provider))
+            cur.execute(
+                "UPDATE threads SET model_provider = ? WHERE model_provider != ?",
+                (target.provider, target.provider),
+            )
         else:
             if not target.provider or not target.model:
                 return 0
@@ -956,7 +1007,9 @@ def connect_sqlite_readonly(path: Path) -> sqlite3.Connection:
     return sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
 
 
-def count_state_rows_to_normalize(path: Path, target: IdentityConfig, keep_models: bool) -> int:
+def count_state_rows_to_normalize(
+    path: Path, target: IdentityConfig, keep_models: bool
+) -> int:
     if not path.exists():
         return 0
     conn = connect_sqlite_readonly(path)
@@ -989,7 +1042,9 @@ def sqlite_threads_columns(conn: sqlite3.Connection) -> list[str]:
     ).fetchone()
     if not found:
         return []
-    return [str(row[1]) for row in conn.execute("PRAGMA table_info(threads)").fetchall()]
+    return [
+        str(row[1]) for row in conn.execute("PRAGMA table_info(threads)").fetchall()
+    ]
 
 
 def _fmt_value(value) -> str:
@@ -998,7 +1053,9 @@ def _fmt_value(value) -> str:
     return str(value)
 
 
-def read_thread_distribution(path: Path) -> tuple[list[tuple[str, str, int]], Optional[str]]:
+def read_thread_distribution(
+    path: Path,
+) -> tuple[list[tuple[str, str, int]], Optional[str]]:
     if not path.exists():
         return [], "missing state_5.sqlite"
     conn = connect_sqlite_readonly(path)
@@ -1016,14 +1073,34 @@ def read_thread_distribution(path: Path) -> tuple[list[tuple[str, str, int]], Op
             ORDER BY COUNT(*) DESC, ifnull(model_provider, ''), ifnull(model, '')
             """
         ).fetchall()
-        return [(str(provider), str(model), int(count)) for provider, model, count in rows], None
+        return [
+            (str(provider), str(model), int(count)) for provider, model, count in rows
+        ], None
     except sqlite3.Error as exc:
         return [], str(exc)
     finally:
         conn.close()
 
 
-def read_recent_threads(path: Path, limit: int = 5) -> tuple[list[dict[str, object]], Optional[str]]:
+def _numeric_sort_value(value: object) -> float:
+    if not isinstance(value, (int, float)):
+        return 0.0
+    try:
+        return float(value)
+    except (OverflowError, ValueError):
+        return 0.0
+
+
+def _thread_updated_sort_value(item: dict[str, object]) -> float:
+    updated_at_ms = item.get("updated_at_ms")
+    if isinstance(updated_at_ms, (int, float)):
+        return _numeric_sort_value(updated_at_ms)
+    return _numeric_sort_value(item.get("updated_at")) * 1000
+
+
+def read_recent_threads(
+    path: Path, limit: int = 5
+) -> tuple[list[dict[str, object]], Optional[str]]:
     if not path.exists():
         return [], "missing state_5.sqlite"
     conn = connect_sqlite_readonly(path)
@@ -1031,18 +1108,39 @@ def read_recent_threads(path: Path, limit: int = 5) -> tuple[list[dict[str, obje
         columns = sqlite_threads_columns(conn)
         if not columns:
             return [], "missing threads table"
-        selected = [c for c in ("id", "thread_id", "title", "model_provider", "model", "updated_at", "created_at") if c in columns]
+        selected = [
+            c
+            for c in (
+                "id",
+                "thread_id",
+                "title",
+                "model_provider",
+                "model",
+                "updated_at",
+                "created_at",
+            )
+            if c in columns
+        ]
         if not selected:
             return [], "threads table has no displayable columns"
-        order_col = next((c for c in ("updated_at", "created_at") if c in columns), None)
-        select_sql = ", ".join(f'"{c}"' for c in selected)
-        order_sql = f' ORDER BY "{order_col}" DESC' if order_col else " ORDER BY rowid DESC"
-        rows = conn.execute(f"SELECT rowid, {select_sql} FROM threads{order_sql} LIMIT ?", (limit,)).fetchall()
+        order_col = next(
+            (c for c in ("updated_at", "created_at") if c in columns), None
+        )
+        rows = conn.execute("SELECT rowid, * FROM threads").fetchall()
+        items = [dict(zip(("rowid", *columns), row)) for row in rows]
+        items.sort(
+            key=lambda item: (
+                _numeric_sort_value(item.get(order_col))
+                if order_col
+                else _numeric_sort_value(item.get("rowid"))
+            ),
+            reverse=True,
+        )
         recent = []
-        for row in rows:
-            item = {"rowid": row[0]}
-            item.update({name: value for name, value in zip(selected, row[1:])})
-            recent.append(item)
+        for item in items[:limit]:
+            recent_item = {"rowid": item["rowid"]}
+            recent_item.update({name: item.get(name) for name in selected})
+            recent.append(recent_item)
         return recent, None
     except sqlite3.Error as exc:
         return [], str(exc)
@@ -1066,14 +1164,18 @@ def has_provider_model_drift(
     return False
 
 
-def plan_merge_history_to_target(codex: Path, target: IdentityConfig, keep_models: bool) -> MergeHistoryResult:
+def plan_merge_history_to_target(
+    codex: Path, target: IdentityConfig, keep_models: bool
+) -> MergeHistoryResult:
     rollout_files = iter_rollout_files(codex)
     state_db = codex / "state_5.sqlite"
     changed_files = 0
     changed_lines = 0
 
     for path in rollout_files:
-        line_count, changed = normalize_rollout_file(path, target, keep_models, apply=False)
+        line_count, changed = normalize_rollout_file(
+            path, target, keep_models, apply=False
+        )
         if changed:
             changed_files += 1
             changed_lines += line_count
@@ -1082,11 +1184,17 @@ def plan_merge_history_to_target(codex: Path, target: IdentityConfig, keep_model
     if state_db.exists():
         state_rows = count_state_rows_to_normalize(state_db, target, keep_models)
 
-    backup_dir = backup_path(codex, "history-merge-backup") if changed_files or state_rows else None
+    backup_dir = (
+        backup_path(codex, "history-merge-backup")
+        if changed_files or state_rows
+        else None
+    )
     return MergeHistoryResult(changed_files, changed_lines, state_rows, backup_dir)
 
 
-def merge_history_to_target(codex: Path, target: IdentityConfig, keep_models: bool) -> MergeHistoryResult:
+def merge_history_to_target(
+    codex: Path, target: IdentityConfig, keep_models: bool
+) -> MergeHistoryResult:
     rollout_files = iter_rollout_files(codex)
     state_db = codex / "state_5.sqlite"
     backup_dir: Optional[Path] = None
@@ -1094,7 +1202,9 @@ def merge_history_to_target(codex: Path, target: IdentityConfig, keep_models: bo
     changed_lines = 0
 
     for path in rollout_files:
-        line_count, changed = normalize_rollout_file(path, target, keep_models, apply=False)
+        line_count, changed = normalize_rollout_file(
+            path, target, keep_models, apply=False
+        )
         if changed:
             if backup_dir is None:
                 backup_dir = backup_root(codex, "history-merge-backup")
@@ -1105,7 +1215,9 @@ def merge_history_to_target(codex: Path, target: IdentityConfig, keep_models: bo
 
     state_rows = 0
     if state_db.exists():
-        preview_state_rows = count_state_rows_to_normalize(state_db, target, keep_models)
+        preview_state_rows = count_state_rows_to_normalize(
+            state_db, target, keep_models
+        )
         if preview_state_rows:
             if backup_dir is None:
                 backup_dir = backup_root(codex, "history-merge-backup")
@@ -1140,54 +1252,32 @@ def maybe_auto_merge_history(codex: Path, *, keep_models: bool = False) -> None:
             print(f"history backup → {result.backup_dir}")
 
 
-def _parse_index_timestamp_ms(raw: object) -> int:
-    if not isinstance(raw, str) or not raw.strip():
-        return 0
-    text = raw.strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return 0
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return int(parsed.timestamp() * 1000)
-
-
 def _format_index_timestamp(updated_at: object, updated_at_ms: object) -> str:
     millis: Optional[int] = None
-    if isinstance(updated_at_ms, int):
-        millis = updated_at_ms
-    elif isinstance(updated_at_ms, float):
-        millis = int(updated_at_ms)
-    elif isinstance(updated_at, int):
-        millis = updated_at * 1000
-    elif isinstance(updated_at, float):
-        millis = int(updated_at * 1000)
+    try:
+        if isinstance(updated_at_ms, int):
+            millis = updated_at_ms
+        elif isinstance(updated_at_ms, float):
+            millis = int(updated_at_ms)
+        elif isinstance(updated_at, int):
+            millis = updated_at * 1000
+        elif isinstance(updated_at, float):
+            millis = int(updated_at * 1000)
+    except (OverflowError, ValueError):
+        millis = None
     if millis is None:
         return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    return datetime.fromtimestamp(millis / 1000, timezone.utc).isoformat().replace("+00:00", "Z")
+    try:
+        parsed = datetime.fromtimestamp(millis / 1000, timezone.utc)
+    except (OSError, OverflowError, ValueError):
+        parsed = datetime.now(timezone.utc)
+    return parsed.isoformat().replace("+00:00", "Z")
 
 
-def _looks_like_prompt_title(value: object) -> bool:
-    if not isinstance(value, str):
-        return False
-    text = value.strip()
-    if not text:
-        return False
-    lower = text.lower()
-    return lower.startswith("<aside") or "<aside" in lower[:120] or (len(text) > 160 and "\n" in text)
-
-
-def _looks_like_human_title(value: object) -> bool:
-    return isinstance(value, str) and bool(value.strip()) and not _looks_like_prompt_title(value)
-
-
-def _read_session_index_state(path: Path) -> dict[str, SessionIndexThreadState]:
-    state: dict[str, SessionIndexThreadState] = {}
+def _read_session_index_titles(path: Path) -> dict[str, str | None]:
+    titles: dict[str, str | None] = {}
     if not path.exists():
-        return state
+        return titles
     with path.open() as fh:
         for raw in fh:
             try:
@@ -1199,174 +1289,81 @@ def _read_session_index_state(path: Path) -> dict[str, SessionIndexThreadState]:
             thread_id = item.get("id")
             if not isinstance(thread_id, str) or not thread_id:
                 continue
-            timestamp_ms = _parse_index_timestamp_ms(item.get("updated_at"))
             name = item.get("thread_name")
-            current = state.get(thread_id, SessionIndexThreadState())
-            latest_ms = current.latest_ms
-            latest_name = current.latest_name
-            if timestamp_ms >= latest_ms:
-                latest_ms = timestamp_ms
-                latest_name = str(name) if isinstance(name, str) else None
-            best_name = current.best_name
-            best_name_ms = current.best_name_ms
-            if _looks_like_human_title(name) and timestamp_ms >= best_name_ms:
-                best_name = str(name).strip()
-                best_name_ms = timestamp_ms
-            state[thread_id] = SessionIndexThreadState(
-                latest_ms=latest_ms,
-                latest_name=latest_name,
-                best_name=best_name,
-                best_name_ms=best_name_ms,
-            )
-    return state
-
-
-def _read_session_index_latest(path: Path) -> dict[str, int]:
-    return {thread_id: item.latest_ms for thread_id, item in _read_session_index_state(path).items()}
+            titles[thread_id] = str(name) if isinstance(name, str) else None
+    return titles
 
 
 def _session_index_thread_columns(conn: sqlite3.Connection) -> list[str]:
     columns = sqlite_threads_columns(conn)
-    needed = {"id", "updated_at"}
-    if not needed.issubset(set(columns)):
+    column_set = set(columns)
+    if "id" not in column_set or not {"updated_at", "updated_at_ms"}.intersection(
+        column_set
+    ):
         return []
     return columns
 
 
-def repair_prompt_like_thread_titles_from_index(
-    codex: Path,
-    rows: list[dict[str, object]],
-    index_state: dict[str, SessionIndexThreadState],
-) -> set[str]:
-    state_db = codex / "state_5.sqlite"
-    repairs: list[tuple[str, str, object]] = []
-    for item in rows:
-        thread_id = item.get("id")
-        if not isinstance(thread_id, str) or not thread_id:
-            continue
-        current_title = item.get("title")
-        best_name = index_state.get(thread_id, SessionIndexThreadState()).best_name
-        if not best_name or not _looks_like_prompt_title(current_title):
-            continue
-        if str(current_title).strip() == best_name:
-            continue
-        repairs.append((best_name, thread_id, current_title))
-
-    if not repairs:
-        return set()
-
-    backup_dir = backup_root(codex, "thread-title-repair-backup")
-    backup_copy(state_db, backup_dir, codex)
-    for suffix in ("-shm", "-wal"):
-        sidecar = codex / f"state_5.sqlite{suffix}"
-        backup_copy(sidecar, backup_dir, codex)
-
-    repaired: set[str] = set()
-    try:
-        conn = sqlite3.connect(state_db)
-    except sqlite3.Error:
-        return repaired
-    try:
-        columns = sqlite_threads_columns(conn)
-        if "id" not in columns or "title" not in columns:
-            return repaired
-        for title, thread_id, old_title in repairs:
-            cur = conn.execute(
-                "UPDATE threads SET title = ? WHERE id = ? AND title = ?",
-                (title, thread_id, old_title),
-            )
-            if cur.rowcount:
-                repaired.add(thread_id)
-        conn.commit()
-    except sqlite3.Error:
-        conn.rollback()
-        return set()
-    finally:
-        conn.close()
-
-    if repaired:
-        print(f"thread titles repaired → {len(repaired)}")
-        print(f"thread title backup → {backup_dir}")
-    return repaired
-
-
-def maybe_repair_session_index(codex: Path) -> None:
+def repair_session_index(
+    codex: Path, *, apply: bool = False
+) -> SessionIndexRepairResult:
+    """Add missing thread IDs to the index without changing any existing title."""
     index = codex / "session_index.jsonl"
     state_db = codex / "state_5.sqlite"
     if not state_db.exists():
-        return
+        return SessionIndexRepairResult((), (), ())
     try:
         conn = connect_sqlite_readonly(state_db)
     except sqlite3.Error:
-        return
+        return SessionIndexRepairResult((), (), ())
     try:
         columns = _session_index_thread_columns(conn)
         if not columns:
-            return
-        selected = [c for c in ("id", "title", "preview", "updated_at", "updated_at_ms", "archived") if c in columns]
-        select_sql = ", ".join(f'"{c}"' for c in selected)
-        rows = conn.execute(
-            f"""
-            SELECT {select_sql}
-            FROM threads
-            WHERE ifnull(archived, 0) = 0
-            ORDER BY ifnull(updated_at_ms, updated_at * 1000) ASC
-            """
-        ).fetchall()
+            return SessionIndexRepairResult((), (), ())
+        rows = conn.execute("SELECT * FROM threads").fetchall()
     except sqlite3.Error:
-        return
+        return SessionIndexRepairResult((), (), ())
     finally:
         conn.close()
 
-    row_items = [{name: value for name, value in zip(selected, row)} for row in rows]
-    index_state = _read_session_index_state(index)
-    repaired_titles = repair_prompt_like_thread_titles_from_index(codex, row_items, index_state)
-    if repaired_titles:
-        for item in row_items:
-            thread_id = item.get("id")
-            if isinstance(thread_id, str) and thread_id in repaired_titles:
-                best_name = index_state.get(thread_id, SessionIndexThreadState()).best_name
-                if best_name:
-                    item["title"] = best_name
-
+    row_items = [dict(zip(columns, row)) for row in rows]
+    row_items = [item for item in row_items if not item.get("archived")]
+    row_items.sort(key=_thread_updated_sort_value)
+    index_titles = _read_session_index_titles(index)
+    missing_thread_ids: list[str] = []
+    title_conflicts: list[tuple[str, str | None, str]] = []
     additions: list[dict[str, str]] = []
     for item in row_items:
         thread_id = item.get("id")
         if not isinstance(thread_id, str) or not thread_id:
             continue
+        title = str(item.get("title") or item.get("preview") or "Untitled session")
+        if thread_id in index_titles:
+            index_title = index_titles[thread_id]
+            if index_title != title:
+                title_conflicts.append((thread_id, index_title, title))
+            continue
         updated_at_ms = item.get("updated_at_ms")
         updated_at = item.get("updated_at")
-        if isinstance(updated_at_ms, (int, float)):
-            current_ms = int(updated_at_ms)
-        elif isinstance(updated_at, (int, float)):
-            current_ms = int(updated_at * 1000)
-        else:
-            continue
-        latest = index_state.get(thread_id, SessionIndexThreadState())
-        title = item.get("title") or item.get("preview") or "Untitled session"
-        should_append_repaired_title = (
-            thread_id in repaired_titles
-            and isinstance(title, str)
-            and latest.latest_name != title
-        )
-        if current_ms <= latest.latest_ms and not should_append_repaired_title:
-            continue
+        missing_thread_ids.append(thread_id)
         additions.append(
             {
                 "id": thread_id,
-                "thread_name": str(title),
+                "thread_name": title,
                 "updated_at": _format_index_timestamp(updated_at, updated_at_ms),
             }
         )
 
-    if not additions:
-        return
-
-    index.parent.mkdir(parents=True, exist_ok=True)
-    with index.open("a") as fh:
-        for item in additions:
-            fh.write(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n")
-    print(f"session index repaired → {len(additions)} entries")
+    if apply and additions:
+        index.parent.mkdir(parents=True, exist_ok=True)
+        with index.open("a") as fh:
+            for item in additions:
+                fh.write(
+                    json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n"
+                )
+    return SessionIndexRepairResult(
+        tuple(missing_thread_ids), tuple(title_conflicts), tuple(additions)
+    )
 
 
 def current_provider_looks_official(codex: Path) -> bool:
@@ -1413,6 +1410,8 @@ def ensure_official_snapshot_available(codex: Path) -> None:
 
 def switch_to_profile(name: str, *, restart_codex: bool = False) -> int:
     normalized_name = normalize_profile_name(name)
+    if normalized_name is None:
+        _die("profile name must not be empty")
     dir_ = profile_dir_for_name(normalized_name)
     if not dir_.is_dir():
         bootstrap_current_profile()
@@ -1428,7 +1427,10 @@ def switch_to_profile(name: str, *, restart_codex: bool = False) -> int:
     cfg = codex / "config.toml"
     current = normalize_profile_name(active_name())
 
-    if current_provider_looks_official(codex) and normalized_name != OFFICIAL_PROFILE_NAME:
+    if (
+        current_provider_looks_official(codex)
+        and normalized_name != OFFICIAL_PROFILE_NAME
+    ):
         snapshot_official_state(codex)
 
     if not cfg.exists():
@@ -1450,7 +1452,6 @@ def switch_to_profile(name: str, *, restart_codex: bool = False) -> int:
     active_file().write_text(normalized_name + "\n")
     print(f"switched → {normalized_name}")
     maybe_auto_merge_history(codex)
-    maybe_repair_session_index(codex)
     maybe_repair_remote_selection_state(codex)
     stopped_runtime = maybe_repair_remote_control(codex)
     if restart_codex:
@@ -1468,7 +1469,9 @@ def cmd_merge_history(args) -> int:
     model = identity.model if args.model is None else args.model
 
     if not provider:
-        _die("target provider is empty; pass --provider or set model_provider in ~/.codex/config.toml")
+        _die(
+            "target provider is empty; pass --provider or set model_provider in ~/.codex/config.toml"
+        )
     if not args.keep_models and not model:
         _die("target model is empty; pass --model or use --keep-models")
 
@@ -1494,19 +1497,40 @@ def cmd_merge_history(args) -> int:
     return 0
 
 
+def cmd_repair_session_index(args) -> int:
+    result = repair_session_index(codex_dir(), apply=args.apply)
+    verb = "appended" if args.apply else "would append"
+    print(f"session index missing thread IDs → {len(result.missing_thread_ids)}")
+    print(f"session index title conflicts → {len(result.title_conflicts)}")
+    print(f"session index entries {verb} → {len(result.additions)}")
+    for thread_id, index_title, sqlite_title in result.title_conflicts:
+        print(
+            "title conflict → "
+            f"id={thread_id} index={json.dumps(index_title, ensure_ascii=False)} "
+            f"sqlite={json.dumps(sqlite_title, ensure_ascii=False)}"
+        )
+    return 0
+
+
 def cmd_doctor_history(_args) -> int:
     codex = codex_dir()
     identity = current_identity()
     profile = normalize_profile_name(active_name())
     if profile:
         profile_dir = profile_dir_for_name(profile)
-        session_desc = load_session_config(profile_dir).describe() if profile_dir.is_dir() else "(profile missing)"
+        session_desc = (
+            load_session_config(profile_dir).describe()
+            if profile_dir.is_dir()
+            else "(profile missing)"
+        )
     else:
         session_desc = "(none)"
 
     print("history doctor")
     print(f"current profile → {profile or '(none)'}")
-    print(f"current config → provider={identity.provider or '(empty)'} model={identity.model or '(empty)'}")
+    print(
+        f"current config → provider={identity.provider or '(empty)'} model={identity.model or '(empty)'}"
+    )
     print(f"session state → {session_desc}")
 
     state_db = codex / "state_5.sqlite"
@@ -1518,7 +1542,9 @@ def cmd_doctor_history(_args) -> int:
         print("  (empty)")
     else:
         for provider, model, count in distribution:
-            print(f"  {count}  provider={_fmt_value(provider)} model={_fmt_value(model)}")
+            print(
+                f"  {count}  provider={_fmt_value(provider)} model={_fmt_value(model)}"
+            )
 
     recent, recent_error = read_recent_threads(state_db)
     print("recent threads:")
@@ -1586,11 +1612,17 @@ def cmd_use(args) -> int:
         profiles = list_profiles()
         if not profiles:
             _die(no_profiles_message())
-        chosen = pick(profiles, active=normalize_profile_name(active_name()), prompt="Switch to which profile?")
+        chosen = pick(
+            profiles,
+            active=normalize_profile_name(active_name()),
+            prompt="Switch to which profile?",
+        )
         if chosen is None:
             print("cancelled")
             return 1
         name = normalize_profile_name(chosen)
+        if name is None:
+            _die("profile name must not be empty")
     if name == OFFICIAL_PROFILE_NAME:
         return cmd_official(args)
     return switch_to_profile(name, restart_codex=getattr(args, "restart_codex", False))
@@ -1599,11 +1631,15 @@ def cmd_use(args) -> int:
 def cmd_official(args) -> int:
     codex = codex_dir()
     ensure_official_snapshot_available(codex)
-    return switch_to_profile(OFFICIAL_PROFILE_NAME, restart_codex=getattr(args, "restart_codex", False))
+    return switch_to_profile(
+        OFFICIAL_PROFILE_NAME, restart_codex=getattr(args, "restart_codex", False)
+    )
 
 
 def cmd_save(args) -> int:
     name = normalize_profile_name(args.name)
+    if name is None:
+        _die("profile name must not be empty")
     if args.shared and args.scope:
         _die("choose either --shared or --scope, not both")
     if name == OFFICIAL_PROFILE_NAME:
@@ -1648,6 +1684,8 @@ def cmd_save(args) -> int:
 
 def cmd_show(args) -> int:
     name = normalize_profile_name(args.name)
+    if name is None:
+        _die("profile name must not be empty")
     dir_ = profile_dir_for_name(name)
     if not dir_.is_dir():
         if name == OFFICIAL_PROFILE_NAME:
@@ -1673,18 +1711,25 @@ def cmd_show(args) -> int:
 
 def cmd_rm(args) -> int:
     name = normalize_profile_name(args.name)
+    if name is None:
+        _die("profile name must not be empty")
     dir_ = profile_dir_for_name(name)
     if not dir_.is_dir():
         _die(f"profile not found: {args.name}")
     if name == normalize_profile_name(active_name()):
         _die(f"cannot remove the active profile: {args.name}")
-    shutil.rmtree(dir_)
+    try:
+        shutil.rmtree(dir_)
+    except OSError as exc:
+        _die(f"could not remove {dir_}: {exc}")
     print(f"removed → {name}")
     return 0
 
 
 def cmd_state(args) -> int:
     name = normalize_profile_name(args.name)
+    if name is None:
+        _die("profile name must not be empty")
     dir_ = profile_dir_for_name(name)
     if not dir_.is_dir():
         _die(f"profile not found: {args.name}")
@@ -1720,7 +1765,11 @@ def cmd_pick(_args) -> int:
     profiles = list_profiles()
     if not profiles:
         _die(no_profiles_message())
-    chosen = pick(profiles, active=normalize_profile_name(active_name()), prompt="Switch to which profile?")
+    chosen = pick(
+        profiles,
+        active=normalize_profile_name(active_name()),
+        prompt="Switch to which profile?",
+    )
     if chosen is None:
         print("cancelled")
         return 1
@@ -1747,19 +1796,40 @@ def build_parser() -> argparse.ArgumentParser:
     s = subs.add_parser("current", help="print the active profile name")
     s.set_defaults(func=cmd_current)
 
-    s = subs.add_parser("official", aliases=["openai"], help="switch back to the official OpenAI provider")
-    s.add_argument("--restart-codex", action="store_true", help="terminate Codex app/server processes after switching")
+    s = subs.add_parser(
+        "official",
+        aliases=["openai"],
+        help="switch back to the official OpenAI provider",
+    )
+    s.add_argument(
+        "--restart-codex",
+        action="store_true",
+        help="terminate Codex app/server processes after switching",
+    )
     s.set_defaults(func=cmd_official)
 
-    s = subs.add_parser("use", aliases=["switch"], help="load <name> (interactive if omitted)")
+    s = subs.add_parser(
+        "use", aliases=["switch"], help="load <name> (interactive if omitted)"
+    )
     s.add_argument("name", nargs="?")
-    s.add_argument("--restart-codex", action="store_true", help="terminate Codex app/server processes after switching")
+    s.add_argument(
+        "--restart-codex",
+        action="store_true",
+        help="terminate Codex app/server processes after switching",
+    )
     s.set_defaults(func=cmd_use)
 
     s = subs.add_parser("save", help="snapshot the current provider config as <name>")
     s.add_argument("name")
-    s.add_argument("--scope", help="also bind this profile to a session-state scope and seed it now")
-    s.add_argument("--shared", action="store_true", help="clear any session-state scope while saving")
+    s.add_argument(
+        "--scope",
+        help="also bind this profile to a session-state scope and seed it now",
+    )
+    s.add_argument(
+        "--shared",
+        action="store_true",
+        help="clear any session-state scope while saving",
+    )
     s.set_defaults(func=cmd_save)
 
     s = subs.add_parser("show", help="print <name>'s provider.toml and session state")
@@ -1768,28 +1838,67 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = subs.add_parser("state", help="show or set <name>'s session-state scope")
     s.add_argument("name")
-    s.add_argument("--scope", help="store/restore Codex history state under this shared scope")
-    s.add_argument("--shared", action="store_true", help="disable session-state swapping for this profile")
+    s.add_argument(
+        "--scope", help="store/restore Codex history state under this shared scope"
+    )
+    s.add_argument(
+        "--shared",
+        action="store_true",
+        help="disable session-state swapping for this profile",
+    )
     s.set_defaults(func=cmd_state)
 
-    s = subs.add_parser("merge-history", help="rewrite local Codex history metadata into one provider/model identity")
-    s.add_argument("--provider", help="target provider; defaults to current ~/.codex/config.toml model_provider")
-    s.add_argument("--model", help="target model; defaults to current ~/.codex/config.toml model")
+    s = subs.add_parser(
+        "merge-history",
+        help="rewrite local Codex history metadata into one provider/model identity",
+    )
+    s.add_argument(
+        "--provider",
+        help="target provider; defaults to current ~/.codex/config.toml model_provider",
+    )
+    s.add_argument(
+        "--model", help="target model; defaults to current ~/.codex/config.toml model"
+    )
     s.add_argument(
         "--keep-models",
         action="store_true",
         help="only normalize provider identity and keep existing per-thread model values",
     )
-    s.add_argument("--dry-run", action="store_true", help="report planned history changes without writing files")
+    s.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report planned history changes without writing files",
+    )
     s.set_defaults(func=cmd_merge_history)
 
-    s = subs.add_parser("doctor-history", help="read-only diagnostics for Codex history provider/model state")
+    s = subs.add_parser(
+        "repair-session-index",
+        help="add missing SQLite thread IDs to session_index.jsonl without overwriting titles",
+    )
+    mode = s.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--apply",
+        action="store_true",
+        help="append missing thread IDs; title conflicts remain unchanged",
+    )
+    mode.add_argument("--dry-run", action="store_true", help="preview only (default)")
+    s.set_defaults(func=cmd_repair_session_index)
+
+    s = subs.add_parser(
+        "doctor-history",
+        help="read-only diagnostics for Codex history provider/model state",
+    )
     s.set_defaults(func=cmd_doctor_history)
 
-    s = subs.add_parser("restart-codex", help="terminate Codex app/server processes so config changes take effect")
+    s = subs.add_parser(
+        "restart-codex",
+        help="terminate Codex app/server processes so config changes take effect",
+    )
     s.set_defaults(func=cmd_restart_codex)
 
-    s = subs.add_parser("rm", aliases=["remove"], help="delete profile (active is protected)")
+    s = subs.add_parser(
+        "rm", aliases=["remove"], help="delete profile (active is protected)"
+    )
     s.add_argument("name")
     s.set_defaults(func=cmd_rm)
 
